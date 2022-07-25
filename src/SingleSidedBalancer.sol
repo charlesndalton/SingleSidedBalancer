@@ -13,6 +13,7 @@ import {IERC20Metadata} from "@yearnvaults/contracts/yToken.sol";
 
 import {IBalancerPool} from "./interfaces/Balancer/IBalancerPool.sol";
 import {IBalancerVault} from "./interfaces/Balancer/IBalancerVault.sol";
+import {IAsset} from "./interfaces/Balancer/IAsset.sol";
 
 /* A few key things can change between underlying pools. For example, although we enter
  * most pools through balancerVault.joinPool(), linear pools such as the aave boosted pool
@@ -28,6 +29,11 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
     VaultAPI public bptVault;
     IBalancerPool public balancerPool;
+    uint8 public numTokens;
+    uint8 public tokenIndex;
+    IAsset[] internal assets;
+    bytes32 public balancerPoolID;
+
     uint256 public maxSlippageIn; // bips
     uint256 public maxSlippageOut; // bips
     uint256 public maxSingleInvest;
@@ -43,11 +49,18 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
     // === DEPLOYMENT FUNCTIONS ===
 
-    // solhint-disable-next-line no-empty-blocks
-    constructor(address _vault) BaseStrategy(_vault) {}
+    constructor(address _vault, address _bptVault) BaseStrategy(_vault) {
+        _initializeStrat(_bptVault);
+    }
 
     // extensions can override this
-    function _initializeStrat(address _bptVault) internal virtual {
+    function _initializeStrat(
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleDeposit,
+        uint256 _minDepositPeriod
+    ) internal virtual {
         // health.ychad.eth
         healthCheck = address(0xDDCea799fF1699e98EDF118e0629A974Df7DF012);
 
@@ -55,18 +68,27 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
         balancerPool = IBalancerPool(bptVault.token());
         bytes32 _poolID = balancerPool.getPoolId();
+        balancerPoolID = _poolID;
 
         (IERC20[] memory tokens, , ) = balancerVault.getPoolTokens(_poolID);
         uint256 _numTokens = uint8(tokens.length);
+        numTokens = _numTokens;
         require(_numTokens > 0, "Empty Pool");
 
+        assets = new IAsset[](numTokens);
         uint256 _tokenIndex = type(uint8).max;
         for (uint8 i = 0; i < _numTokens; i++) {
             if (tokens[i] == want) {
                 _tokenIndex = i;
             }
+            assets[i] = IAsset(address(tokens[i]));
         }
         require(_tokenIndex != type(uint8).max, "token not supported in pool!");
+
+        maxSlippageIn = _maxSlippageIn;
+        maxSlippageOut = _maxSlippageOut;
+        maxSingleDeposit = _maxSingleDeposit;
+        minDepositPeriod = _minDepositPeriod;
     }
 
     // === TVL ACCOUNTING ===
@@ -369,3 +391,63 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
  * Extensions can optionally add other functions which allow vault managers
  * to manually manage the position.
  */
+
+contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
+    constructor(address _vault, address _bptVault)
+        BaseSingleSidedBalancer(_bptVault)
+    {}
+
+    function extensionName() internal override returns (string memory) {
+        // basic pool, no frills
+        return "BASIC";
+    }
+
+    function investWantIntoBalancerPool(uint256 _wantAmount) internal override {
+        uint256 _minBPTOut = (wantToBPT(amountIn) * (MAX_BPS - maxSlippageIn)) /
+            MAX_BPS;
+        uint256[] memory _maxAmountsIn = new uint256[](numTokens);
+        _maxAmountsIn[tokenIndex] = _wantAmount;
+
+        if (_wantAmount > 0) {
+            bytes memory _userData = abi.encode(
+                IBalancerVault.JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT,
+                _maxAmountsIn,
+                _minBPTOut
+            );
+
+            IBalancerVault.JoinPoolRequest memory _request = IBalancerVault
+                .JoinPoolRequest(assets, maxAmountsIn, _userData, false);
+
+            balancerVault.joinPool(
+                balancerPoolID,
+                address(this),
+                address(this),
+                _request
+            );
+        }
+    }
+
+    function liquidateBPTsToWant(uint256 _bptAmount) internal override {
+        uint256[] memory _minAmountsOut = new uint256[](numTokens);
+
+        _minAmountsOut[tokenIndex] =
+            (bptToWant(_bptAmount) * (MAX_BPS - maxSlippageOut)) /
+            MAX_BPS;
+
+        bytes memory _userData = abi.encode(
+            IBalancerVault.ExitKind.EXACT_BPT_IN_FOR_ONE_TOKEN_OUT,
+            _amountBpts,
+            tokenIndex
+        );
+
+        IBalancerVault.ExitPoolRequest memory _request = IBalancerVault
+            .ExitPoolRequest(assets, _minAmountsOut, _userData, false);
+
+        balancerVault.exitPool(
+            balancerPoolId,
+            address(this),
+            address(this),
+            _request
+        );
+    }
+}
