@@ -3,6 +3,10 @@
 pragma solidity ^0.8.12;
 pragma experimental ABIEncoderV2;
 
+import {IAsset} from "./IAsset.sol";
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 interface IBalancerVault {
     enum PoolSpecialization {
         GENERAL,

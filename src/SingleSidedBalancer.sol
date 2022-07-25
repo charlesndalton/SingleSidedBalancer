@@ -49,8 +49,21 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
     // === DEPLOYMENT FUNCTIONS ===
 
-    constructor(address _vault, address _bptVault) BaseStrategy(_vault) {
-        _initializeStrat(_bptVault);
+    constructor(
+        address _vault,
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleInvest,
+        uint256 _minDepositPeriod
+    ) BaseStrategy(_vault) {
+        _initializeStrat(
+            _bptVault,
+            _maxSlippageIn,
+            _maxSlippageOut,
+            _maxSingleInvest,
+            _minDepositPeriod
+        );
     }
 
     // extensions can override this
@@ -58,7 +71,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
         address _bptVault,
         uint256 _maxSlippageIn,
         uint256 _maxSlippageOut,
-        uint256 _maxSingleDeposit,
+        uint256 _maxSingleInvest,
         uint256 _minDepositPeriod
     ) internal virtual {
         // health.ychad.eth
@@ -87,7 +100,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
         maxSlippageIn = _maxSlippageIn;
         maxSlippageOut = _maxSlippageOut;
-        maxSingleDeposit = _maxSingleDeposit;
+        maxSingleInvest = _maxSingleInvest;
         minDepositPeriod = _minDepositPeriod;
     }
 
@@ -394,17 +407,17 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
 contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
     constructor(address _vault, address _bptVault)
-        BaseSingleSidedBalancer(_bptVault)
+        BaseSingleSidedBalancer(_vault, _bptVault)
     {}
 
-    function extensionName() internal override returns (string memory) {
+    function extensionName() internal view override returns (string memory) {
         // basic pool, no frills
         return "BASIC";
     }
 
     function investWantIntoBalancerPool(uint256 _wantAmount) internal override {
-        uint256 _minBPTOut = (wantToBPT(amountIn) * (MAX_BPS - maxSlippageIn)) /
-            MAX_BPS;
+        uint256 _minBPTOut = (wantToBPT(_wantAmount) *
+            (MAX_BPS - maxSlippageIn)) / MAX_BPS;
         uint256[] memory _maxAmountsIn = new uint256[](numTokens);
         _maxAmountsIn[tokenIndex] = _wantAmount;
 
@@ -416,7 +429,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
             );
 
             IBalancerVault.JoinPoolRequest memory _request = IBalancerVault
-                .JoinPoolRequest(assets, maxAmountsIn, _userData, false);
+                .JoinPoolRequest(assets, _maxAmountsIn, _userData, false);
 
             balancerVault.joinPool(
                 balancerPoolID,
@@ -436,7 +449,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
 
         bytes memory _userData = abi.encode(
             IBalancerVault.ExitKind.EXACT_BPT_IN_FOR_ONE_TOKEN_OUT,
-            _amountBpts,
+            _bptAmount,
             tokenIndex
         );
 
@@ -444,7 +457,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
             .ExitPoolRequest(assets, _minAmountsOut, _userData, false);
 
         balancerVault.exitPool(
-            balancerPoolId,
+            balancerPoolID,
             address(this),
             address(this),
             _request

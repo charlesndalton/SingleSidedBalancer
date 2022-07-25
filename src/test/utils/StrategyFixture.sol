@@ -8,8 +8,7 @@ import {ExtendedTest} from "./ExtendedTest.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IVault} from "../../interfaces/Vault.sol";
 
-// NOTE: if the name of the strat or file changes this needs to be updated
-import {Strategy} from "../../Strategy.sol";
+import {BaseSingleSidedBalancer, BasicSingleSidedBalancer} from "../../SingleSidedBalancer.sol";
 
 // Artifact paths for deploying from the deps folder, assumes that the command is run from
 // the project root.
@@ -19,13 +18,23 @@ string constant vaultArtifact = "artifacts/Vault.json";
 contract StrategyFixture is ExtendedTest {
     using SafeERC20 for IERC20;
 
-    IVault public vault;
-    Strategy public strategy;
-    IERC20 public weth;
-    IERC20 public want;
+    BaseSingleSidedBalancer[] public strategyFixtures;
 
-    mapping(string => address) public tokenAddrs;
-    mapping(string => uint256) public tokenPrices;
+    IERC20 public weth;
+
+    enum SSBType {
+        BASIC
+    }
+
+    mapping(string => address) internal tokenAddrs;
+    mapping(string => uint256) internal tokenPrices;
+    // Have 1 bpt vault per want
+    mapping(string => address) internal bptVaults;
+    mapping(string => SSBType) internal ssbTypes;
+    mapping(string => uint256) internal maxSlippagesIn;
+    mapping(string => uint256) internal maxSlippagesOut;
+    mapping(string => uint256) internal maxSingleInvests;
+    mapping(string => uint256) internal minDepositPeriods;
 
     address public gov = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
     address public user = address(1);
@@ -52,9 +61,15 @@ contract StrategyFixture is ExtendedTest {
         _setTokenPrices();
         _setTokenAddrs();
 
-        // Choose a token from the tokenAddrs mapping, see _setTokenAddrs for options
-        string memory token = "DAI";
-        weth = IERC20(tokenAddrs["WETH"]);
+        // // Choose a token from the tokenAddrs mapping, see _setTokenAddrs for options
+        // weth = IERC20(tokenAddrs["WETH"]);
+
+        string[1] memory _tokensToTest = ["USDC"];
+
+        for (uint8 i = 0; i < _tokensToTest.length; ++i) {
+            string memory _tokenToTest = _tokensToTest[i];
+            IERC20 _want = IERC20(tokenAddrs[_tokenToTest]);
+        }
         want = IERC20(tokenAddrs[token]);
 
         (address _vault, address _strategy) = deployVaultAndStrategy(
@@ -81,7 +96,6 @@ contract StrategyFixture is ExtendedTest {
 
         // add more labels to make your traces readable
         vm.label(address(vault), "Vault");
-        vm.label(address(strategy), "Strategy");
         vm.label(address(want), "Want");
         vm.label(gov, "Gov");
         vm.label(user, "User");
@@ -131,6 +145,26 @@ contract StrategyFixture is ExtendedTest {
         Strategy _strategy = new Strategy(_vault);
 
         return address(_strategy);
+    }
+
+    function deployBasicSSB(
+        address _vault,
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleInvest,
+        uint256 _minDepositPeriod
+    ) internal returns (address) {
+        BasicSingleSidedBalancer _ssb = new BasicSingleSidedBalancer(
+            _vault,
+            _bptVault,
+            _maxSlippageIn,
+            _maxSlippageOut,
+            _maxSingleInvest,
+            _minDepositPeriod
+        );
+
+        return address(_ssb);
     }
 
     // Deploys a vault and strategy attached to vault
@@ -187,5 +221,29 @@ contract StrategyFixture is ExtendedTest {
         tokenPrices["USDT"] = 1;
         tokenPrices["USDC"] = 1;
         tokenPrices["DAI"] = 1;
+    }
+
+    function _setBPTVaults() internal {
+        bptVaults["USDC"] = 0xA9412Ffd7E0866755ae0dda3318470A61F62abe8; // FUD
+    }
+
+    function _setSSBTypes() internal {
+        ssbTypes["USDC"] = SSBType.BASIC;
+    }
+
+    function _setMaxSlippagesIn() internal {
+        maxSlippagesIn["USDC"] = 30;
+    }
+
+    function _setMaxSlippagesOut() internal {
+        maxSlippagesOut["USDC"] = 30;
+    }
+
+    function _setMaxSingleInvests() internal {
+        maxSingleInvests["USDC"] = 15_000 * 1e6;
+    }
+
+    function _setMinDepositPeriods() internal {
+        minDepositPeriods["USDC"] = 3 days;
     }
 }
