@@ -3,7 +3,8 @@
 pragma solidity ^0.8.12;
 pragma experimental ABIEncoderV2;
 
-import {BaseStrategy, StrategyParams, VaultAPI} from "@yearnvaults/contracts/BaseStrategy.sol";
+import {BaseStrategy, StrategyParams} from "@yearnvaults/contracts/BaseStrategy.sol";
+
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
@@ -14,6 +15,7 @@ import {IERC20Metadata} from "@yearnvaults/contracts/yToken.sol";
 import {IBalancerPool} from "./interfaces/Balancer/IBalancerPool.sol";
 import {IBalancerVault} from "./interfaces/Balancer/IBalancerVault.sol";
 import {IAsset} from "./interfaces/Balancer/IAsset.sol";
+import {IVault} from "./interfaces/Yearn/Vault.sol"; 
 
 import "forge-std/console2.sol";
 
@@ -29,7 +31,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
     uint256 public lastDepositTime;
 
-    VaultAPI public bptVault;
+    IVault public bptVault;
     IBalancerPool public balancerPool;
     uint8 public numTokens;
     uint8 public tokenIndex;
@@ -81,7 +83,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
         // and tests wont pass in those cases. Should be uncommented before deployment
         // healthCheck = address(0xDDCea799fF1699e98EDF118e0629A974Df7DF012);
 
-        bptVault = VaultAPI(_bptVault);
+        bptVault = IVault(_bptVault);
 
         balancerPool = IBalancerPool(bptVault.token());
         bytes32 _poolID = balancerPool.getPoolId();
@@ -323,15 +325,18 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
         override
         returns (uint256 _amountFreed)
     {
-        // we can request a lot, but don't use max because of overflow
-        (_amountFreed, ) = liquidatePosition(1e36);
+        // slippage checks still exist in emergency exit
+        bptVault.withdraw(bptVault.balanceOf(address(this)));
+        liquidateBPTsToWant(balancerPool.balanceOf(address(this)));
+        return want.balanceOf(address(this));
     }
 
     // === MISC FUNCTIONS ===
 
-    // Examples: SSB_DAI_NORMAL_FUD, SSB_USDC_PHANTOM_bb-a-USD
+    // Examples: BASIC, PHANTOM
     function extensionName() internal view virtual returns (string memory);
 
+    // Examples: SSB_DAI_BASIC_FUD, SSB_USDC_PHANTOM_bb-a-USD
     function name() external view override returns (string memory) {
         return
             string(
