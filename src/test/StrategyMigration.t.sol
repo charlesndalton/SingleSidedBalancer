@@ -59,17 +59,19 @@ contract StrategyMigrationTest is StrategyFixture {
                     )
                 );
             } else if (_ssbType == SSBType.PHANTOM) {
-                newStrategy = BaseSingleSidedBalancer(deployPhantomSSB(
-                    address(vault),
-                    bptVaults[_wantSymbol],
-                    maxSlippagesIn[_wantSymbol],
-                    maxSlippagesOut[_wantSymbol],
-                    maxSingleInvests[_wantSymbol],
-                    minDepositPeriods[_wantSymbol],
-                    swapPathPoolIDs[_wantSymbol],
-                    swapPathAssets[_wantSymbol],
-                    swapPathAssetIndexes[_wantSymbol]
-                ));
+                newStrategy = BaseSingleSidedBalancer(
+                    deployPhantomSSB(
+                        address(vault),
+                        bptVaults[_wantSymbol],
+                        maxSlippagesIn[_wantSymbol],
+                        maxSlippagesOut[_wantSymbol],
+                        maxSingleInvests[_wantSymbol],
+                        minDepositPeriods[_wantSymbol],
+                        swapPathPoolIDs[_wantSymbol],
+                        swapPathAssets[_wantSymbol],
+                        swapPathAssetIndexes[_wantSymbol]
+                    )
+                );
             }
             vm.prank(gov);
             vault.migrateStrategy(address(strategy), address(newStrategy));

@@ -248,7 +248,7 @@ contract StrategyFixture is ExtendedTest {
         BaseStrategy autoCompounderStrategy = BaseStrategy(
             autoCompounder.withdrawalQueue(0)
         );
-        
+
         uint256 autoCompounderAssets = autoCompounder.totalAssets();
         deal(
             bptToken,
