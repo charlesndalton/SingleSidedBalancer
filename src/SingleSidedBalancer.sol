@@ -52,10 +52,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
     // === DEPLOYMENT FUNCTIONS ===
 
-    constructor(
-        address _vault
-    ) BaseStrategy(_vault) {
-    }
+    constructor(address _vault) BaseStrategy(_vault) {}
 
     // === TVL ACCOUNTING ===
 
