@@ -219,6 +219,7 @@ contract StrategyFixture is ExtendedTest {
 
     function _setBPTVaults() internal {
         bptVaults["USDC"] = 0xA9412Ffd7E0866755ae0dda3318470A61F62abe8; // FUD
+        vm.label(0xA9412Ffd7E0866755ae0dda3318470A61F62abe8, "FUDVault");
     }
 
     function _setSSBTypes() internal {
@@ -234,7 +235,7 @@ contract StrategyFixture is ExtendedTest {
     }
 
     function _setMaxSingleInvests() internal {
-        maxSingleInvests["USDC"] = 15_000 * 1e6;
+        maxSingleInvests["USDC"] = 250_000 * 1e6;
     }
 
     function _setMinDepositPeriods() internal {
