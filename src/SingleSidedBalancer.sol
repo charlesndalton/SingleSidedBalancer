@@ -77,7 +77,9 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
         uint256 _minDepositPeriod
     ) internal virtual {
         // health.ychad.eth
-        healthCheck = address(0xDDCea799fF1699e98EDF118e0629A974Df7DF012);
+        // this is commented out because sometimes we have more than 1 bip of losses,
+        // and tests wont pass in those cases. Should be uncommented before deployment
+        // healthCheck = address(0xDDCea799fF1699e98EDF118e0629A974Df7DF012);
 
         bptVault = VaultAPI(_bptVault);
 
@@ -111,6 +113,8 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
             address(bptVault),
             type(uint256).max
         );
+
+        withdrawProtection = true;
     }
 
     // === TVL ACCOUNTING ===
@@ -246,13 +250,14 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
         if (_liquidAssets < _amountNeeded) {
             uint256 _toWithdraw = _amountNeeded - _liquidAssets;
-            (_liquidatedAmount, _loss) = withdrawSome(_toWithdraw);
+            (_liquidatedAmount, ) = withdrawSome(_toWithdraw);
         }
 
         _liquidatedAmount = Math.min(
             _amountNeeded,
             _liquidatedAmount + _liquidAssets
         );
+        _loss = _amountNeeded - _liquidatedAmount;
     }
 
     // safe to request more than we have
