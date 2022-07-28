@@ -7,7 +7,6 @@ import {BaseSingleSidedBalancer} from "../SingleSidedBalancer.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@yearnvaults/contracts/yToken.sol";
 
-
 contract StrategyRevokeTest is StrategyFixture {
     function setUp() public override {
         super.setUp();
@@ -83,7 +82,6 @@ contract StrategyRevokeTest is StrategyFixture {
             vm.prank(strategist);
             strategy.harvest();
             assertRelApproxEq(want.balanceOf(address(vault)), _amount, DELTA);
-
         }
     }
 }

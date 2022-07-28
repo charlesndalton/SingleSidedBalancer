@@ -7,7 +7,6 @@ import {BaseSingleSidedBalancer} from "../SingleSidedBalancer.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@yearnvaults/contracts/yToken.sol";
 
-
 contract StrategyShutdownTest is StrategyFixture {
     function setUp() public override {
         super.setUp();
@@ -79,7 +78,7 @@ contract StrategyShutdownTest is StrategyFixture {
 
             deal(address(want), user, _amount);
 
-             // Deposit to the vault
+            // Deposit to the vault
             vm.prank(user);
             want.approve(address(vault), _amount);
             vm.prank(user);
@@ -110,6 +109,6 @@ contract StrategyShutdownTest is StrategyFixture {
             assertEq(want.balanceOf(address(strategy)), 0);
             assertRelApproxEq(want.balanceOf(address(vault)), _amount, DELTA); // The vault has all funds
             // NOTE: May want to tweak this based on potential loss during migration
-        }       
+        }
     }
 }

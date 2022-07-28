@@ -48,18 +48,24 @@ contract StrategyMigrationTest is StrategyFixture {
             BaseSingleSidedBalancer newStrategy;
             SSBType _ssbType = ssbTypes[_wantSymbol];
             if (_ssbType == SSBType.BASIC) {
-                newStrategy = BaseSingleSidedBalancer(deployBasicSSB(
-                    address(vault),
-                    bptVaults[_wantSymbol],
-                    maxSlippagesIn[_wantSymbol],
-                    maxSlippagesOut[_wantSymbol],
-                    maxSingleInvests[_wantSymbol],
-                    minDepositPeriods[_wantSymbol]
-                ));
+                newStrategy = BaseSingleSidedBalancer(
+                    deployBasicSSB(
+                        address(vault),
+                        bptVaults[_wantSymbol],
+                        maxSlippagesIn[_wantSymbol],
+                        maxSlippagesOut[_wantSymbol],
+                        maxSingleInvests[_wantSymbol],
+                        minDepositPeriods[_wantSymbol]
+                    )
+                );
             }
             vm.prank(gov);
             vault.migrateStrategy(address(strategy), address(newStrategy));
-            assertRelApproxEq(newStrategy.estimatedTotalAssets(), _amount, DELTA);
+            assertRelApproxEq(
+                newStrategy.estimatedTotalAssets(),
+                _amount,
+                DELTA
+            );
         }
     }
 }

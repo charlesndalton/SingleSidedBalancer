@@ -5,7 +5,6 @@ pragma experimental ABIEncoderV2;
 
 import {BaseStrategy, StrategyParams} from "@yearnvaults/contracts/BaseStrategy.sol";
 
-
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -15,7 +14,7 @@ import {IERC20Metadata} from "@yearnvaults/contracts/yToken.sol";
 import {IBalancerPool} from "./interfaces/Balancer/IBalancerPool.sol";
 import {IBalancerVault} from "./interfaces/Balancer/IBalancerVault.sol";
 import {IAsset} from "./interfaces/Balancer/IAsset.sol";
-import {IVault} from "./interfaces/Yearn/Vault.sol"; 
+import {IVault} from "./interfaces/Yearn/Vault.sol";
 
 import "forge-std/console2.sol";
 
