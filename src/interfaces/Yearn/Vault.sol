@@ -24,6 +24,10 @@ interface IVault is IERC20 {
 
     function apiVersion() external pure returns (string memory);
 
+    function withdrawalQueue(uint256 i) external view returns (address);
+
+    function totalDebt() external view returns (uint256);
+
     function permit(
         address owner,
         address spender,

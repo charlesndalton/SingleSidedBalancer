@@ -7,6 +7,7 @@ import {StrategyParams, IVault} from "../interfaces/Yearn/Vault.sol";
 import {BaseSingleSidedBalancer} from "../SingleSidedBalancer.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@yearnvaults/contracts/yToken.sol";
+import {BaseStrategy} from "@yearnvaults/contracts/BaseStrategy.sol";
 
 contract StrategyOperationsTest is StrategyFixture {
     // setup is run on before each test
@@ -127,7 +128,15 @@ contract StrategyOperationsTest is StrategyFixture {
             strategy.harvest();
             assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, DELTA);
 
-            // TODO: Add some code before harvest #2 to simulate earning yield
+            // simulate yield by throwing some bpts in the underlying vault
+            address bptToken = address(strategy.balancerPool());
+            IVault autoCompounder = strategy.bptVault();
+            BaseStrategy autoCompounderStrategy = BaseStrategy(autoCompounder.withdrawalQueue(0));
+            uint256 autoCompounderDebt = autoCompounder.totalDebt();
+            deal(bptToken, address(autoCompounderStrategy), autoCompounderDebt / 200); // 0.5% gain
+            vm.prank(autoCompounderStrategy.strategist());
+            autoCompounderStrategy.harvest();
+            skip(6 hours);
 
             // Harvest 2: Realize profit
             skip(1);
@@ -135,10 +144,9 @@ contract StrategyOperationsTest is StrategyFixture {
             strategy.harvest();
             skip(6 hours);
 
-            // TODO: Uncomment the lines below
-            // uint256 profit = want.balanceOf(address(vault));
-            // assertGt(want.balanceOf(address(strategy)) + profit, _amount);
-            // assertGt(vault.pricePerShare(), beforePps)
+            uint256 profit = want.balanceOf(address(vault));
+            assertGt(strategy.estimatedTotalAssets() + profit, _amount);
+            assertGt(vault.pricePerShare(), beforePps);
         }
     }
 
