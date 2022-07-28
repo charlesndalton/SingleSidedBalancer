@@ -101,7 +101,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
             }
             assets[i] = IAsset(address(tokens[i]));
         }
-        require(_tokenIndex != type(uint8).max, "token not supported in pool!");
+        // require(_tokenIndex != type(uint8).max, "token not supported in pool!");
         tokenIndex = _tokenIndex;
 
         maxSlippageIn = _maxSlippageIn;
@@ -500,7 +500,6 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
 // Phantom BPTs need to be swapped into. Since I don't trust ySwaps to swap principal,
 // you need to pass in a swap route during deployment
 contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
-    
     // These three are set manually by strategists
     bytes32[] public swapPathPoolIDs; // pool IDs of pools in your swap path, in the order of swapping.
     IAsset[] public swapPathAssets; // these MUST be sorted numerically
@@ -515,9 +514,10 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
      * if assets was [bb_a_DAI, bb_a_USD, DAI], swapPathAssetIndexes would be [2, 1, 0]
      */
 
-     // These are set automatically by the code
-     int256[] limits;
-     IBalancerVault.BatchSwapStep[] batchSwapSteps;
+    // These are set automatically by the code
+    int256[] limits;
+    IBalancerVault.BatchSwapStep[] batchSwapSteps;
+    IBalancerVault.BatchSwapStep[] reverseBatchSwapSteps;
 
     constructor(
         address _vault,
@@ -543,17 +543,35 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         swapPathAssets = _swapPathAssets;
         swapPathAssetIndexes = _swapPathAssetIndexes;
 
-        for (uint8 i = 0; i < swapPathPoolIDs.length; ++i) {
-            batchSwapSteps[i] = IBalancerVault.BatchSwapStep(
-                swapPathPoolIDs[i], // poolId
-                swapPathAssetIndexes[i], // assetInIndex
-                swapPathAssetIndexes[i + 1], // assetOutIndex
-                0, // amount (PLACEHOLDER)
-                abi.encode(0) // userData
+        // we need to create one swap path for swapping want -> BPT and one for swapping BPT -> want
+
+        // example of swap steps here: https://github.com/charlesndalton/StrategyBalancerTemplate/blob/df947fbb2f4b973d46b820001e476dfbe27c0826/tests/test_yswap.py#L79-L104
+        uint256 _numberOfPools = swapPathPoolIDs.length;
+        for (uint8 i = 0; i < _numberOfPools; i++) {
+            batchSwapSteps.push(
+                IBalancerVault.BatchSwapStep(
+                    swapPathPoolIDs[i], // poolId
+                    swapPathAssetIndexes[i], // assetInIndex
+                    swapPathAssetIndexes[i + 1], // assetOutIndex
+                    0, // amount (PLACEHOLDER)
+                    abi.encode(0) // userData
+                )
             );
 
-            limits[i] = 2**200;
+            reverseBatchSwapSteps.push(
+                IBalancerVault.BatchSwapStep(
+                    swapPathPoolIDs[_numberOfPools - 1 - i],
+                    swapPathAssetIndexes[_numberOfPools - i],
+                    swapPathAssetIndexes[_numberOfPools - 1 - i],
+                    0,
+                    abi.encode(0)
+                )
+            );
+
+            limits.push(2**200);
         }
+
+        limits.push(2**200); // always will be 1 more asset than pool, this isn't the cleanest way to do it but saves some gas
     }
 
     function extensionName() internal view override returns (string memory) {
@@ -565,16 +583,15 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         // uint256 _minBPTOut = (wantToBPT(_wantAmount) *
         //     (MAX_BPS - maxSlippageIn)) / MAX_BPS;
 
-        // example of swap steps here: https://github.com/charlesndalton/StrategyBalancerTemplate/blob/df947fbb2f4b973d46b820001e476dfbe27c0826/tests/test_yswap.py#L79-L104
         batchSwapSteps[0].amount = _wantAmount;
-        
 
-        IBalancerVault.FundManagement memory _funds = IBalancerVault.FundManagement(
-            address(this), // sender
-            false, // fromInternalBalance
-            payable(address(this)), // recipient
-            false // toInternalBalance
-        );
+        IBalancerVault.FundManagement memory _funds = IBalancerVault
+            .FundManagement(
+                address(this), // sender
+                false, // fromInternalBalance
+                payable(address(this)), // recipient
+                false // toInternalBalance
+            );
 
         balancerVault.batchSwap(
             IBalancerVault.SwapKind.GIVEN_IN,
@@ -586,5 +603,24 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         );
     }
 
-    function liquidateBPTsToWant(uint256 _bptAmount) internal override {}
+    function liquidateBPTsToWant(uint256 _bptAmount) internal override {
+        reverseBatchSwapSteps[0].amount = _bptAmount;
+
+        IBalancerVault.FundManagement memory _funds = IBalancerVault
+            .FundManagement(
+                address(this), // sender
+                false, // fromInternalBalance
+                payable(address(this)), // recipient
+                false // toInternalBalance
+            );
+
+        balancerVault.batchSwap(
+            IBalancerVault.SwapKind.GIVEN_IN,
+            reverseBatchSwapSteps,
+            swapPathAssets,
+            _funds,
+            limits,
+            block.timestamp
+        );
+    }
 }
