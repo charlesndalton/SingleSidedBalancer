@@ -34,7 +34,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     IBalancerPool public balancerPool;
     uint8 public numTokens;
     uint8 public tokenIndex;
-    IAsset[] internal assets;
+    IAsset[] internal assets; // assets of the pool
     bytes32 public balancerPoolID;
 
     uint256 public maxSlippageIn; // bips
@@ -495,4 +495,96 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
             _request
         );
     }
+}
+
+// Phantom BPTs need to be swapped into. Since I don't trust ySwaps to swap principal,
+// you need to pass in a swap route during deployment
+contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
+    
+    // These three are set manually by strategists
+    bytes32[] public swapPathPoolIDs; // pool IDs of pools in your swap path, in the order of swapping.
+    IAsset[] public swapPathAssets; // these MUST be sorted numerically
+    uint256[] public swapPathAssetIndexes;
+    /*
+     * Example: let's say we wanted to single-side DAI into the boosted pool
+     * swapPathPoolIDs[0] would be the ID of the pool that contains regular DAI and bb_a_DAI
+     * swapPathPoolIDs[1] would be the ID of the pool that contains bb_a_DAI and bb_a_USD (the real BPT)
+     * If these were reversed, the strategy would try to swap DAI into the bb_a_DAI/bb_a_USD pool, which doesn't make any sense.
+     * assets would be DAI, bb_a_DAI, and bb_a_USD, sorted numerically (so not necessarily in that order, but let's assume that this is the case)
+     * swapPathAssetIndexes would be [0, 1, 2]
+     * if assets was [bb_a_DAI, bb_a_USD, DAI], swapPathAssetIndexes would be [2, 1, 0]
+     */
+
+     // These are set automatically by the code
+     int256[] limits;
+     IBalancerVault.BatchSwapStep[] batchSwapSteps;
+
+    constructor(
+        address _vault,
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleInvest,
+        uint256 _minDepositPeriod,
+        bytes32[] memory _swapPathPoolIDs,
+        IAsset[] memory _swapPathAssets,
+        uint256[] memory _swapPathAssetIndexes
+    )
+        BaseSingleSidedBalancer(
+            _vault,
+            _bptVault,
+            _maxSlippageIn,
+            _maxSlippageOut,
+            _maxSingleInvest,
+            _minDepositPeriod
+        )
+    {
+        swapPathPoolIDs = _swapPathPoolIDs;
+        swapPathAssets = _swapPathAssets;
+        swapPathAssetIndexes = _swapPathAssetIndexes;
+
+        for (uint8 i = 0; i < swapPathPoolIDs.length; ++i) {
+            batchSwapSteps[i] = IBalancerVault.BatchSwapStep(
+                swapPathPoolIDs[i], // poolId
+                swapPathAssetIndexes[i], // assetInIndex
+                swapPathAssetIndexes[i + 1], // assetOutIndex
+                0, // amount (PLACEHOLDER)
+                abi.encode(0) // userData
+            );
+
+            limits[i] = 2**200;
+        }
+    }
+
+    function extensionName() internal view override returns (string memory) {
+        // basic pool, no frills
+        return "PHANTOM";
+    }
+
+    function investWantIntoBalancerPool(uint256 _wantAmount) internal override {
+        // uint256 _minBPTOut = (wantToBPT(_wantAmount) *
+        //     (MAX_BPS - maxSlippageIn)) / MAX_BPS;
+
+        // example of swap steps here: https://github.com/charlesndalton/StrategyBalancerTemplate/blob/df947fbb2f4b973d46b820001e476dfbe27c0826/tests/test_yswap.py#L79-L104
+        batchSwapSteps[0].amount = _wantAmount;
+        
+
+        IBalancerVault.FundManagement memory _funds = IBalancerVault.FundManagement(
+            address(this), // sender
+            false, // fromInternalBalance
+            payable(address(this)), // recipient
+            false // toInternalBalance
+        );
+
+        balancerVault.batchSwap(
+            IBalancerVault.SwapKind.GIVEN_IN,
+            batchSwapSteps,
+            swapPathAssets,
+            _funds,
+            limits,
+            block.timestamp
+        );
+    }
+
+    function liquidateBPTsToWant(uint256 _bptAmount) internal override {}
 }
