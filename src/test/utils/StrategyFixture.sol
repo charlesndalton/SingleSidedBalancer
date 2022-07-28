@@ -46,8 +46,8 @@ contract StrategyFixture is ExtendedTest {
     address public keeper = address(7);
 
     // Used for integer approximation
-    uint256 public constant DELTA = 10**5;
-    uint256 public minFuzzAmt = 1 ether; // 10 cents
+    uint256 public constant DELTA = 10**3;
+    uint256 public minFuzzAmt = 100 ether; // 10 cents
     uint256 public maxFuzzAmt = 25_000_000 ether; // $25M
 
     function setUp() public virtual {
@@ -78,8 +78,14 @@ contract StrategyFixture is ExtendedTest {
 
             strategyFixtures.push(BaseSingleSidedBalancer(_strategy));
 
-            vm.label(address(_vault), string(abi.encodePacked(_tokenToTest, "Vault")));
-            vm.label(address(_strategy), string(abi.encodePacked(_tokenToTest, "Strategy")));
+            vm.label(
+                address(_vault),
+                string(abi.encodePacked(_tokenToTest, "Vault"))
+            );
+            vm.label(
+                address(_strategy),
+                string(abi.encodePacked(_tokenToTest, "Strategy"))
+            );
             vm.label(address(_want), _tokenToTest);
         }
 
@@ -177,9 +183,10 @@ contract StrategyFixture is ExtendedTest {
                 maxSingleInvests[_tokenToTest],
                 minDepositPeriods[_tokenToTest]
             );
-
-        } 
-        BaseSingleSidedBalancer _strategy = BaseSingleSidedBalancer(_strategyAddr);
+        }
+        BaseSingleSidedBalancer _strategy = BaseSingleSidedBalancer(
+            _strategyAddr
+        );
 
         vm.prank(strategist);
         _strategy.setKeeper(keeper);
@@ -219,11 +226,11 @@ contract StrategyFixture is ExtendedTest {
     }
 
     function _setMaxSlippagesIn() internal {
-        maxSlippagesIn["USDC"] = 30;
+        maxSlippagesIn["USDC"] = 50;
     }
 
     function _setMaxSlippagesOut() internal {
-        maxSlippagesOut["USDC"] = 30;
+        maxSlippagesOut["USDC"] = 50;
     }
 
     function _setMaxSingleInvests() internal {

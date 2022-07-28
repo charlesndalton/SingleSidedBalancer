@@ -15,7 +15,6 @@ contract StrategyOperationsTest is StrategyFixture {
         super.setUp();
     }
 
-
     /// Test Operations
     function testStrategyOperation(uint256 _fuzzAmount) public {
         vm.assume(_fuzzAmount > minFuzzAmt && _fuzzAmount < maxFuzzAmt);
@@ -29,7 +28,7 @@ contract StrategyOperationsTest is StrategyFixture {
             if (_wantDecimals != 18) {
                 uint256 _decimalDifference = 18 - _wantDecimals;
 
-                _amount = _amount / (10 ** _decimalDifference);
+                _amount = _amount / (10**_decimalDifference);
             }
 
             deal(address(want), user, _amount);
@@ -50,8 +49,9 @@ contract StrategyOperationsTest is StrategyFixture {
             vm.prank(strategist);
             strategy.tend();
 
-            vm.prank(user);
-            vault.withdraw();
+            vm.startPrank(user);
+            vault.withdraw(vault.balanceOf(user), user, 10);
+            vm.stopPrank();
 
             assertRelApproxEq(want.balanceOf(user), balanceBefore, DELTA);
         }
@@ -180,8 +180,8 @@ contract StrategyOperationsTest is StrategyFixture {
     //     strategy.harvest();
     //     //Make sure we have updated the debt ratio of the strategy
     //     assertRelApproxEq(
-    //         strategy.estimatedTotalAssets(), 
-    //         _amount / 2, 
+    //         strategy.estimatedTotalAssets(),
+    //         _amount / 2,
     //         DELTA
     //     );
     //     skip(6 hours);
@@ -191,8 +191,8 @@ contract StrategyOperationsTest is StrategyFixture {
     //     StrategyParams memory params = vault.strategies(address(strategy));
     //     //Make sure we got back profit + half the deposit
     //     assertRelApproxEq(
-    //         _amount / 2 + params.totalGain, 
-    //         vaultBalance, 
+    //         _amount / 2 + params.totalGain,
+    //         vaultBalance,
     //         DELTA
     //     );
     //     assertGe(vault.pricePerShare(), beforePps);

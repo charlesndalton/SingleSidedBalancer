@@ -15,6 +15,8 @@ import {IBalancerPool} from "./interfaces/Balancer/IBalancerPool.sol";
 import {IBalancerVault} from "./interfaces/Balancer/IBalancerVault.sol";
 import {IAsset} from "./interfaces/Balancer/IAsset.sol";
 
+import "forge-std/console2.sol";
+
 /* A few key things can change between underlying pools. For example, although we enter
  * most pools through balancerVault.joinPool(), linear pools such as the aave boosted pool
  * don't support this, and we need to enter them through batch swaps. Common logic inside
@@ -89,7 +91,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
         require(_numTokens > 0, "Empty Pool");
 
         assets = new IAsset[](numTokens);
-        uint256 _tokenIndex = type(uint8).max;
+        uint8 _tokenIndex = type(uint8).max;
         for (uint8 i = 0; i < _numTokens; i++) {
             if (tokens[i] == want) {
                 _tokenIndex = i;
@@ -97,11 +99,18 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
             assets[i] = IAsset(address(tokens[i]));
         }
         require(_tokenIndex != type(uint8).max, "token not supported in pool!");
+        tokenIndex = _tokenIndex;
 
         maxSlippageIn = _maxSlippageIn;
         maxSlippageOut = _maxSlippageOut;
         maxSingleInvest = _maxSingleInvest;
         minDepositPeriod = _minDepositPeriod;
+
+        want.safeApprove(address(balancerVault), type(uint256).max);
+        IERC20(address(balancerPool)).safeApprove(
+            address(bptVault),
+            type(uint256).max
+        );
     }
 
     // === TVL ACCOUNTING ===
@@ -414,7 +423,14 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         uint256 _maxSingleInvest,
         uint256 _minDepositPeriod
     )
-        BaseSingleSidedBalancer(_vault, _bptVault, _maxSlippageIn, _maxSlippageOut, _maxSingleInvest, _minDepositPeriod)
+        BaseSingleSidedBalancer(
+            _vault,
+            _bptVault,
+            _maxSlippageIn,
+            _maxSlippageOut,
+            _maxSingleInvest,
+            _minDepositPeriod
+        )
     {}
 
     function extensionName() internal view override returns (string memory) {
