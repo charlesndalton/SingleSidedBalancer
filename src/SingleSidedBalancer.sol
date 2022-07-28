@@ -236,7 +236,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
             if (_liquidAssets < _profit) {
                 _profit = _liquidAssets;
                 _debtPayment = 0;
-            } else if (_liquidAssets < _debtPayment - _profit) {
+            } else if (_liquidAssets < _debtPayment + _profit) {
                 _debtPayment = _liquidAssets - _profit;
             }
         }
