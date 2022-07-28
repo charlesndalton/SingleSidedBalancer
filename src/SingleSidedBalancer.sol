@@ -21,8 +21,8 @@ import "forge-std/console2.sol";
 /* A few key things can change between underlying pools. For example, although we enter
  * most pools through balancerVault.joinPool(), linear pools such as the aave boosted pool
  * don't support this, and we need to enter them through batch swaps. Common logic inside
- * 'BaseSingleSidedBalancer' and details are implemented in extending strategies such as
- * 'SingleSidedBalancerLinearPool'.
+ * 'BaseSingleSidedBalancer' and details are implemented in extensions such as
+ * 'PhantomSingleSidedBalancer'.
  */
 abstract contract BaseSingleSidedBalancer is BaseStrategy {
     using SafeERC20 for IERC20;
@@ -53,69 +53,8 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     // === DEPLOYMENT FUNCTIONS ===
 
     constructor(
-        address _vault,
-        address _bptVault,
-        uint256 _maxSlippageIn,
-        uint256 _maxSlippageOut,
-        uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod
+        address _vault
     ) BaseStrategy(_vault) {
-        _initializeStrat(
-            _bptVault,
-            _maxSlippageIn,
-            _maxSlippageOut,
-            _maxSingleInvest,
-            _minDepositPeriod
-        );
-    }
-
-    // extensions can override this
-    function _initializeStrat(
-        address _bptVault,
-        uint256 _maxSlippageIn,
-        uint256 _maxSlippageOut,
-        uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod
-    ) internal virtual {
-        // health.ychad.eth
-        // this is commented out because sometimes we have more than 1 bip of losses,
-        // and tests wont pass in those cases. Should be uncommented before deployment
-        // healthCheck = address(0xDDCea799fF1699e98EDF118e0629A974Df7DF012);
-
-        bptVault = IVault(_bptVault);
-
-        balancerPool = IBalancerPool(bptVault.token());
-        bytes32 _poolID = balancerPool.getPoolId();
-        balancerPoolID = _poolID;
-
-        (IERC20[] memory tokens, , ) = balancerVault.getPoolTokens(_poolID);
-        uint8 _numTokens = uint8(tokens.length);
-        numTokens = _numTokens;
-        require(_numTokens > 0, "Empty Pool");
-
-        assets = new IAsset[](numTokens);
-        uint8 _tokenIndex = type(uint8).max;
-        for (uint8 i = 0; i < _numTokens; i++) {
-            if (tokens[i] == want) {
-                _tokenIndex = i;
-            }
-            assets[i] = IAsset(address(tokens[i]));
-        }
-        // require(_tokenIndex != type(uint8).max, "token not supported in pool!");
-        tokenIndex = _tokenIndex;
-
-        maxSlippageIn = _maxSlippageIn;
-        maxSlippageOut = _maxSlippageOut;
-        maxSingleInvest = _maxSingleInvest;
-        minDepositPeriod = _minDepositPeriod;
-
-        want.safeApprove(address(balancerVault), type(uint256).max);
-        IERC20(address(balancerPool)).safeApprove(
-            address(bptVault),
-            type(uint256).max
-        );
-
-        withdrawProtection = true;
     }
 
     // === TVL ACCOUNTING ===
@@ -419,11 +358,21 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
  * function investWantIntoBalancerPool(uint256 _wantAmount)
  * function liquidateBPTsToWant(uint256 _bptAmount)
  *
+ *
  * Extensions can optionally add other functions which allow vault managers
  * to manually manage the position.
  */
 
 contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
+    using SafeERC20 for IERC20;
+    using Address for address;
+
+    event Cloned(address indexed clone);
+
+    bool public isOriginal = true;
+
+    // Cloning & initialization code adapted from https://github.com/yearn/yearn-vaults/blob/43a0673ab89742388369bc0c9d1f321aa7ea73f6/contracts/BaseStrategy.sol#L866
+
     constructor(
         address _vault,
         address _bptVault,
@@ -431,16 +380,128 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         uint256 _maxSlippageOut,
         uint256 _maxSingleInvest,
         uint256 _minDepositPeriod
-    )
-        BaseSingleSidedBalancer(
-            _vault,
+    ) BaseSingleSidedBalancer(_vault) {
+        _initializeStrat(
             _bptVault,
             _maxSlippageIn,
             _maxSlippageOut,
             _maxSingleInvest,
             _minDepositPeriod
-        )
-    {}
+        );
+    }
+
+    function _initializeStrat(
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleInvest,
+        uint256 _minDepositPeriod
+    ) internal virtual {
+        // health.ychad.eth
+        // this is commented out because sometimes we have more than 1 bip of losses,
+        // and tests wont pass in those cases. Should be uncommented before deployment
+        // healthCheck = address(0xDDCea799fF1699e98EDF118e0629A974Df7DF012);
+
+        bptVault = IVault(_bptVault);
+
+        balancerPool = IBalancerPool(bptVault.token());
+        bytes32 _poolID = balancerPool.getPoolId();
+        balancerPoolID = _poolID;
+
+        (IERC20[] memory tokens, , ) = balancerVault.getPoolTokens(_poolID);
+        uint8 _numTokens = uint8(tokens.length);
+        numTokens = _numTokens;
+        require(_numTokens > 0, "Empty Pool");
+
+        assets = new IAsset[](numTokens);
+        uint8 _tokenIndex = type(uint8).max;
+        for (uint8 i = 0; i < _numTokens; i++) {
+            if (tokens[i] == want) {
+                _tokenIndex = i;
+            }
+            assets[i] = IAsset(address(tokens[i]));
+        }
+        // require(_tokenIndex != type(uint8).max, "token not supported in pool!");
+        tokenIndex = _tokenIndex;
+
+        maxSlippageIn = _maxSlippageIn;
+        maxSlippageOut = _maxSlippageOut;
+        maxSingleInvest = _maxSingleInvest;
+        minDepositPeriod = _minDepositPeriod;
+
+        want.safeApprove(address(balancerVault), type(uint256).max);
+        IERC20(address(balancerPool)).safeApprove(
+            address(bptVault),
+            type(uint256).max
+        );
+
+        withdrawProtection = true;
+    }
+
+    function initialize(
+        address _vault,
+        address _strategist,
+        address _rewards,
+        address _keeper,
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleInvest,
+        uint256 _minDepositPeriod
+    ) external virtual {
+        _initialize(_vault, _strategist, _rewards, _keeper);
+        _initializeStrat(
+            _bptVault,
+            _maxSlippageIn,
+            _maxSlippageOut,
+            _maxSingleInvest,
+            _minDepositPeriod
+        );
+    }
+
+    function clone(
+        address _vault,
+        address _strategist,
+        address _rewards,
+        address _keeper,
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleInvest,
+        uint256 _minDepositPeriod
+    ) external returns (address newStrategy) {
+        require(isOriginal, "!clone");
+        bytes20 addressBytes = bytes20(address(this));
+
+        assembly {
+            // EIP-1167 bytecode
+            let clone_code := mload(0x40)
+            mstore(
+                clone_code,
+                0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000000000000000000000
+            )
+            mstore(add(clone_code, 0x14), addressBytes)
+            mstore(
+                add(clone_code, 0x28),
+                0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000
+            )
+            newStrategy := create(0, clone_code, 0x37)
+        }
+
+        BasicSingleSidedBalancer(newStrategy).initialize(
+            _vault,
+            _strategist,
+            _rewards,
+            _keeper,
+            _bptVault,
+            _maxSlippageIn,
+            _maxSlippageOut,
+            _maxSingleInvest,
+            _minDepositPeriod
+        );
+
+        emit Cloned(newStrategy);
+    }
 
     function extensionName() internal view override returns (string memory) {
         // basic pool, no frills
@@ -500,6 +561,9 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
 // Phantom BPTs need to be swapped into. Since I don't trust ySwaps to swap principal,
 // you need to pass in a swap route during deployment
 contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
+    using SafeERC20 for IERC20;
+    using Address for address;
+
     // These three are set manually by strategists
     bytes32[] public swapPathPoolIDs; // pool IDs of pools in your swap path, in the order of swapping.
     IAsset[] public swapPathAssets; // these MUST be sorted numerically
@@ -519,6 +583,12 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
     IBalancerVault.BatchSwapStep[] batchSwapSteps;
     IBalancerVault.BatchSwapStep[] reverseBatchSwapSteps;
 
+    event Cloned(address indexed clone);
+
+    bool public isOriginal = true;
+
+    // Cloning & initialization code adapted from https://github.com/yearn/yearn-vaults/blob/43a0673ab89742388369bc0c9d1f321aa7ea73f6/contracts/BaseStrategy.sol#L866
+
     constructor(
         address _vault,
         address _bptVault,
@@ -529,16 +599,51 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         bytes32[] memory _swapPathPoolIDs,
         IAsset[] memory _swapPathAssets,
         uint256[] memory _swapPathAssetIndexes
-    )
-        BaseSingleSidedBalancer(
-            _vault,
+    ) BaseSingleSidedBalancer(_vault) {
+        _initializeStrat(
             _bptVault,
             _maxSlippageIn,
             _maxSlippageOut,
             _maxSingleInvest,
-            _minDepositPeriod
-        )
-    {
+            _minDepositPeriod,
+            _swapPathPoolIDs,
+            _swapPathAssets,
+            _swapPathAssetIndexes
+        );
+    }
+
+    function _initializeStrat(
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleInvest,
+        uint256 _minDepositPeriod,
+        bytes32[] memory _swapPathPoolIDs,
+        IAsset[] memory _swapPathAssets,
+        uint256[] memory _swapPathAssetIndexes
+    ) internal virtual {
+        // health.ychad.eth
+        // this is commented out because sometimes we have more than 1 bip of losses,
+        // and tests wont pass in those cases. Should be uncommented before deployment
+        // healthCheck = address(0xDDCea799fF1699e98EDF118e0629A974Df7DF012);
+
+        bptVault = IVault(_bptVault);
+
+        balancerPool = IBalancerPool(bptVault.token());
+        bytes32 _poolID = balancerPool.getPoolId();
+        balancerPoolID = _poolID;
+
+        maxSlippageIn = _maxSlippageIn;
+        maxSlippageOut = _maxSlippageOut;
+        maxSingleInvest = _maxSingleInvest;
+        minDepositPeriod = _minDepositPeriod;
+
+        want.safeApprove(address(balancerVault), type(uint256).max);
+        IERC20(address(balancerPool)).safeApprove(
+            address(bptVault),
+            type(uint256).max
+        );
+
         swapPathPoolIDs = _swapPathPoolIDs;
         swapPathAssets = _swapPathAssets;
         swapPathAssetIndexes = _swapPathAssetIndexes;
@@ -572,6 +677,85 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         }
 
         limits.push(2**200); // always will be 1 more asset than pool, this isn't the cleanest way to do it but saves some gas
+
+        withdrawProtection = true;
+    }
+
+    function initialize(
+        address _vault,
+        address _strategist,
+        address _rewards,
+        address _keeper,
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleInvest,
+        uint256 _minDepositPeriod,
+        bytes32[] memory _swapPathPoolIDs,
+        IAsset[] memory _swapPathAssets,
+        uint256[] memory _swapPathAssetIndexes
+    ) external virtual {
+        _initialize(_vault, _strategist, _rewards, _keeper);
+        _initializeStrat(
+            _bptVault,
+            _maxSlippageIn,
+            _maxSlippageOut,
+            _maxSingleInvest,
+            _minDepositPeriod,
+            _swapPathPoolIDs,
+            _swapPathAssets,
+            _swapPathAssetIndexes
+        );
+    }
+
+    function clone(
+        address _vault,
+        address _strategist,
+        address _rewards,
+        address _keeper,
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleInvest,
+        uint256 _minDepositPeriod,
+        bytes32[] memory _swapPathPoolIDs,
+        IAsset[] memory _swapPathAssets,
+        uint256[] memory _swapPathAssetIndexes
+    ) external returns (address newStrategy) {
+        require(isOriginal, "!clone");
+        bytes20 addressBytes = bytes20(address(this));
+
+        assembly {
+            // EIP-1167 bytecode
+            let clone_code := mload(0x40)
+            mstore(
+                clone_code,
+                0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000000000000000000000
+            )
+            mstore(add(clone_code, 0x14), addressBytes)
+            mstore(
+                add(clone_code, 0x28),
+                0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000
+            )
+            newStrategy := create(0, clone_code, 0x37)
+        }
+
+        PhantomSingleSidedBalancer(newStrategy).initialize(
+            _vault,
+            _strategist,
+            _rewards,
+            _keeper,
+            _bptVault,
+            _maxSlippageIn,
+            _maxSlippageOut,
+            _maxSingleInvest,
+            _minDepositPeriod,
+            _swapPathPoolIDs,
+            _swapPathAssets,
+            _swapPathAssetIndexes
+        );
+
+        emit Cloned(newStrategy);
     }
 
     function extensionName() internal view override returns (string memory) {
