@@ -30,34 +30,35 @@ contract StrategyShutdownTest is StrategyFixture {
 
             deal(address(want), user, _amount);
 
-                    // Deposit to the vault
-        vm.prank(user);
-        want.approve(address(vault), _amount);
-        vm.prank(user);
-        vault.deposit(_amount);
-        assertRelApproxEq(want.balanceOf(address(vault)), _amount, DELTA);
-
-        uint256 bal = want.balanceOf(user);
-        if (bal > 0) {
+            // Deposit to the vault
             vm.prank(user);
-            want.transfer(address(0), bal);
-        }
+            want.approve(address(vault), _amount);
+            vm.prank(user);
+            vault.deposit(_amount);
+            assertRelApproxEq(want.balanceOf(address(vault)), _amount, DELTA);
 
-        // Harvest 1: Send funds through the strategy
-        skip(7 hours);
-        vm.prank(strategist);
-        strategy.harvest();
-        assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, DELTA);
+            uint256 bal = want.balanceOf(user);
+            if (bal > 0) {
+                vm.prank(user);
+                want.transfer(address(0), bal);
+            }
 
-        // Set Emergency
-        vm.prank(gov);
-        vault.setEmergencyShutdown(true);
+            // Harvest 1: Send funds through the strategy
+            skip(7 hours);
+            vm.prank(strategist);
+            strategy.harvest();
+            assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, DELTA);
 
-        // Withdraw (does it work, do you get what you expect)
-        vm.prank(user);
-        vault.withdraw();
+            // Set Emergency
+            vm.prank(gov);
+            vault.setEmergencyShutdown(true);
 
-        assertRelApproxEq(want.balanceOf(user), _amount, DELTA);
+            // Withdraw (does it work, do you get what you expect)
+            vm.startPrank(user);
+            vault.withdraw(vault.balanceOf(user), user, 10); // allow 10 bips loss
+            vm.stopPrank();
+
+            assertRelApproxEq(want.balanceOf(user), _amount, DELTA);
         }
     }
 
@@ -79,36 +80,36 @@ contract StrategyShutdownTest is StrategyFixture {
             deal(address(want), user, _amount);
 
              // Deposit to the vault
-        vm.prank(user);
-        want.approve(address(vault), _amount);
-        vm.prank(user);
-        vault.deposit(_amount);
-        assertRelApproxEq(want.balanceOf(address(vault)), _amount, DELTA);
+            vm.prank(user);
+            want.approve(address(vault), _amount);
+            vm.prank(user);
+            vault.deposit(_amount);
+            assertRelApproxEq(want.balanceOf(address(vault)), _amount, DELTA);
 
-        // Harvest 1: Send funds through the strategy
-        skip(1 days);
-        vm.prank(strategist);
-        strategy.harvest();
-        assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, DELTA);
+            // Harvest 1: Send funds through the strategy
+            skip(1 days);
+            vm.prank(strategist);
+            strategy.harvest();
+            assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, DELTA);
 
-        // Earn interest
-        skip(1 days);
+            // Earn interest
+            skip(1 days);
 
-        // Harvest 2: Realize profit
-        vm.prank(strategist);
-        strategy.harvest();
-        skip(6 hours);
+            // Harvest 2: Realize profit
+            vm.prank(strategist);
+            strategy.harvest();
+            skip(6 hours);
 
-        // Set emergency
-        vm.prank(strategist);
-        strategy.setEmergencyExit();
+            // Set emergency
+            vm.prank(strategist);
+            strategy.setEmergencyExit();
 
-        vm.prank(strategist);
-        strategy.harvest(); // Remove funds from strategy
+            vm.prank(strategist);
+            strategy.harvest(); // Remove funds from strategy
 
-        assertEq(want.balanceOf(address(strategy)), 0);
-        assertGe(want.balanceOf(address(vault)), _amount); // The vault has all funds
-        // NOTE: May want to tweak this based on potential loss during migration
+            assertEq(want.balanceOf(address(strategy)), 0);
+            assertRelApproxEq(want.balanceOf(address(vault)), _amount, DELTA); // The vault has all funds
+            // NOTE: May want to tweak this based on potential loss during migration
         }       
     }
 }

@@ -53,7 +53,7 @@ contract StrategyOperationsTest is StrategyFixture {
             strategy.tend();
 
             vm.startPrank(user);
-            vault.withdraw(vault.balanceOf(user), user, 1000);
+            vault.withdraw(vault.balanceOf(user), user, 10); // allow 10 bips loss
             vm.stopPrank();
 
             assertRelApproxEq(want.balanceOf(user), balanceBefore, DELTA);
