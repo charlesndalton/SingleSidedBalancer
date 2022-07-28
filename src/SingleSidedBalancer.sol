@@ -84,7 +84,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
         balancerPoolID = _poolID;
 
         (IERC20[] memory tokens, , ) = balancerVault.getPoolTokens(_poolID);
-        uint256 _numTokens = uint8(tokens.length);
+        uint8 _numTokens = uint8(tokens.length);
         numTokens = _numTokens;
         require(_numTokens > 0, "Empty Pool");
 
@@ -406,8 +406,15 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
  */
 
 contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
-    constructor(address _vault, address _bptVault)
-        BaseSingleSidedBalancer(_vault, _bptVault)
+    constructor(
+        address _vault,
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleInvest,
+        uint256 _minDepositPeriod
+    )
+        BaseSingleSidedBalancer(_vault, _bptVault, _maxSlippageIn, _maxSlippageOut, _maxSingleInvest, _minDepositPeriod)
     {}
 
     function extensionName() internal view override returns (string memory) {
@@ -459,7 +466,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         balancerVault.exitPool(
             balancerPoolID,
             address(this),
-            address(this),
+            payable(address(this)),
             _request
         );
     }
