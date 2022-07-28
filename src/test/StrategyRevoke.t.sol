@@ -39,14 +39,12 @@ contract StrategyRevokeTest is StrategyFixture {
             strategy.harvest();
             assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, DELTA);
 
-            // In order to pass these tests, you will need to implement prepareReturn.
-            // TODO: uncomment the following lines.
-            // vm.prank(gov);
-            // vault.revokeStrategy(address(strategy));
-            // skip(1);
-            // vm.prank(strategist);
-            // strategy.harvest();
-            // assertRelApproxEq(want.balanceOf(address(vault)), _amount, DELTA);
+            vm.prank(gov);
+            vault.revokeStrategy(address(strategy));
+            skip(1);
+            vm.prank(strategist);
+            strategy.harvest();
+            assertRelApproxEq(want.balanceOf(address(vault)), _amount, DELTA);
         }
     }
 

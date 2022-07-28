@@ -129,20 +129,7 @@ contract StrategyOperationsTest is StrategyFixture {
             assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, DELTA);
 
             // simulate yield by throwing some bpts in the underlying vault
-            address bptToken = address(strategy.balancerPool());
-            IVault autoCompounder = strategy.bptVault();
-            BaseStrategy autoCompounderStrategy = BaseStrategy(
-                autoCompounder.withdrawalQueue(0)
-            );
-            uint256 autoCompounderDebt = autoCompounder.totalDebt();
-            deal(
-                bptToken,
-                address(autoCompounderStrategy),
-                autoCompounderDebt / 200
-            ); // 0.5% gain
-            vm.prank(autoCompounderStrategy.strategist());
-            autoCompounderStrategy.harvest();
-            skip(6 hours);
+            simulateYield(strategy);
 
             // Harvest 2: Realize profit
             skip(1);
@@ -192,14 +179,12 @@ contract StrategyOperationsTest is StrategyFixture {
             strategy.harvest();
             assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, DELTA);
 
-            // In order to pass these tests, you will need to implement prepareReturn.
-            // TODO: uncomment the following lines.
-            // vm.prank(gov);
-            // vault.updateStrategyDebtRatio(address(strategy), 5_000);
-            // skip(1);
-            // vm.prank(strategist);
-            // strategy.harvest();
-            // assertRelApproxEq(strategy.estimatedTotalAssets(), half, DELTA);
+            vm.prank(gov);
+            vault.updateStrategyDebtRatio(address(strategy), 5_000);
+            skip(1);
+            vm.prank(strategist);
+            strategy.harvest();
+            assertRelApproxEq(strategy.estimatedTotalAssets(), half, DELTA);
         }
     }
 
@@ -234,14 +219,11 @@ contract StrategyOperationsTest is StrategyFixture {
             strategy.harvest();
             assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, DELTA);
 
-            // TODO: Add some code before harvest #2 to simulate earning yield
+            simulateYield(strategy);
 
             vm.prank(gov);
             vault.updateStrategyDebtRatio(address(strategy), 5_000);
 
-            // In order to pass these tests, you will need to implement prepareReturn.
-            // TODO: uncomment the following lines.
-            /*
             // Harvest 2: Realize profit
             skip(1);
             vm.prank(strategist);
@@ -264,7 +246,6 @@ contract StrategyOperationsTest is StrategyFixture {
                 DELTA
             );
             assertGe(vault.pricePerShare(), beforePps);
-            */
         }
     }
 

@@ -7,8 +7,10 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ExtendedTest} from "./ExtendedTest.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IVault} from "../../interfaces/Yearn/Vault.sol";
+import {IAsset} from "../../interfaces/Balancer/IAsset.sol";
+import {BaseStrategy} from "@yearnvaults/contracts/BaseStrategy.sol";
 
-import {BaseSingleSidedBalancer, BasicSingleSidedBalancer} from "../../SingleSidedBalancer.sol";
+import {BaseSingleSidedBalancer, BasicSingleSidedBalancer, PhantomSingleSidedBalancer} from "../../SingleSidedBalancer.sol";
 
 // Artifact paths for deploying from the deps folder, assumes that the command is run from
 // the project root.
@@ -23,7 +25,8 @@ contract StrategyFixture is ExtendedTest {
     IERC20 public weth;
 
     enum SSBType {
-        BASIC
+        BASIC,
+        PHANTOM
     }
 
     mapping(string => address) internal tokenAddrs;
@@ -35,6 +38,11 @@ contract StrategyFixture is ExtendedTest {
     mapping(string => uint256) internal maxSlippagesOut;
     mapping(string => uint256) internal maxSingleInvests;
     mapping(string => uint256) internal minDepositPeriods;
+
+    // only relevant for phantom BPT pools
+    mapping(string => bytes32[]) internal swapPathPoolIDs;
+    mapping(string => IAsset[]) internal swapPathAssets;
+    mapping(string => uint256[]) internal swapPathAssetIndexes;
 
     address public gov = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
     address public user = address(1);
@@ -59,21 +67,21 @@ contract StrategyFixture is ExtendedTest {
         _setMaxSlippagesOut();
         _setMaxSingleInvests();
         _setMinDepositPeriods();
+        _setSwapPathPoolIDs();
+        _setSwapPathAssets();
+        _setSwapPathAssetIndexes();
 
         // // Choose a token from the tokenAddrs mapping, see _setTokenAddrs for options
         // weth = IERC20(tokenAddrs["WETH"]);
 
-        string[1] memory _tokensToTest = ["USDC"];
+        string[2] memory _tokensToTest = ["USDC", "DAI"];
 
         for (uint8 i = 0; i < _tokensToTest.length; ++i) {
             string memory _tokenToTest = _tokensToTest[i];
             IERC20 _want = IERC20(tokenAddrs[_tokenToTest]);
 
             (address _vault, address _strategy) = deployVaultAndStrategy(
-                address(_want),
-                _tokenToTest,
-                "",
-                ""
+                _tokenToTest
             );
 
             strategyFixtures.push(BaseSingleSidedBalancer(_strategy));
@@ -152,19 +160,44 @@ contract StrategyFixture is ExtendedTest {
         return address(_ssb);
     }
 
+    function deployPhantomSSB(
+        address _vault,
+        address _bptVault,
+        uint256 _maxSlippageIn,
+        uint256 _maxSlippageOut,
+        uint256 _maxSingleInvest,
+        uint256 _minDepositPeriod,
+        bytes32[] memory _swapPathPoolIDs,
+        IAsset[] memory _swapPathAssets,
+        uint256[] memory _swapPathAssetIndexes
+    ) internal returns (address) {
+        PhantomSingleSidedBalancer _ssb = new PhantomSingleSidedBalancer(
+            _vault,
+            _bptVault,
+            _maxSlippageIn,
+            _maxSlippageOut,
+            _maxSingleInvest,
+            _minDepositPeriod,
+            _swapPathPoolIDs,
+            _swapPathAssets,
+            _swapPathAssetIndexes
+        );
+
+        return address(_ssb);
+    }
+
     // Deploys a vault and strategy attached to vault
-    function deployVaultAndStrategy(
-        address _token,
-        string memory _tokenToTest,
-        string memory _name,
-        string memory _symbol
-    ) public returns (address _vaultAddr, address _strategyAddr) {
+    function deployVaultAndStrategy(string memory _tokenToTest)
+        public
+        returns (address _vaultAddr, address _strategyAddr)
+    {
+        address _token = tokenAddrs[_tokenToTest];
         _vaultAddr = deployVault(
             _token,
             gov,
             rewards,
-            _name,
-            _symbol,
+            "",
+            "",
             guardian,
             management
         );
@@ -183,6 +216,18 @@ contract StrategyFixture is ExtendedTest {
                 maxSingleInvests[_tokenToTest],
                 minDepositPeriods[_tokenToTest]
             );
+        } else if (_ssbType == SSBType.PHANTOM) {
+            _strategyAddr = deployPhantomSSB(
+                _vaultAddr,
+                bptVaults[_tokenToTest],
+                maxSlippagesIn[_tokenToTest],
+                maxSlippagesOut[_tokenToTest],
+                maxSingleInvests[_tokenToTest],
+                minDepositPeriods[_tokenToTest],
+                swapPathPoolIDs[_tokenToTest],
+                swapPathAssets[_tokenToTest],
+                swapPathAssetIndexes[_tokenToTest]
+            );
         }
         BaseSingleSidedBalancer _strategy = BaseSingleSidedBalancer(
             _strategyAddr
@@ -195,6 +240,23 @@ contract StrategyFixture is ExtendedTest {
         _vault.addStrategy(_strategyAddr, 10_000, 0, type(uint256).max, 1_000);
 
         return (address(_vault), address(_strategy));
+    }
+
+    function simulateYield(BaseSingleSidedBalancer strategy) internal {
+        address bptToken = address(strategy.balancerPool());
+        IVault autoCompounder = strategy.bptVault();
+        BaseStrategy autoCompounderStrategy = BaseStrategy(
+            autoCompounder.withdrawalQueue(0)
+        );
+        uint256 autoCompounderDebt = autoCompounder.totalDebt();
+        deal(
+            bptToken,
+            address(autoCompounderStrategy),
+            autoCompounderDebt / 200
+        ); // 0.5% gain
+        vm.prank(autoCompounderStrategy.strategist());
+        autoCompounderStrategy.harvest();
+        skip(6 hours);
     }
 
     function _setTokenAddrs() internal {
@@ -220,25 +282,66 @@ contract StrategyFixture is ExtendedTest {
     function _setBPTVaults() internal {
         bptVaults["USDC"] = 0xA9412Ffd7E0866755ae0dda3318470A61F62abe8; // FUD
         vm.label(0xA9412Ffd7E0866755ae0dda3318470A61F62abe8, "FUDVault");
+        bptVaults["DAI"] = 0xCf9D867d869ab6aAAC1b9406ED3175aEb9FAb49C; // Boosted
+        vm.label(0xCf9D867d869ab6aAAC1b9406ED3175aEb9FAb49C, "BoostedVault");
     }
 
     function _setSSBTypes() internal {
         ssbTypes["USDC"] = SSBType.BASIC;
+        ssbTypes["DAI"] = SSBType.PHANTOM;
     }
 
     function _setMaxSlippagesIn() internal {
         maxSlippagesIn["USDC"] = 50;
+        maxSlippagesIn["DAI"] = 50;
     }
 
     function _setMaxSlippagesOut() internal {
         maxSlippagesOut["USDC"] = 50;
+        maxSlippagesIn["DAI"] = 50;
     }
 
     function _setMaxSingleInvests() internal {
         maxSingleInvests["USDC"] = 250_000 * 1e6;
+        maxSingleInvests["DAI"] = 250_000 * 1e18;
     }
 
     function _setMinDepositPeriods() internal {
         minDepositPeriods["USDC"] = 3 days;
+        minDepositPeriods["DAI"] = 3 days;
     }
+
+    function _setSwapPathPoolIDs() internal {
+        swapPathPoolIDs["DAI"] = new bytes32[](2);
+        swapPathPoolIDs["DAI"][
+            0
+        ] = 0x804cdb9116a10bb78768d3252355a1b18067bf8f0000000000000000000000fb; // boosted DAI pool
+        swapPathPoolIDs["DAI"][
+            1
+        ] = 0x7b50775383d3d6f0215a8f290f2c9e2eebbeceb20000000000000000000000fe; // boosted USD pool
+    }
+
+    function _setSwapPathAssets() internal {
+        swapPathAssets["DAI"] = new IAsset[](3);
+        swapPathAssets["DAI"][0] = IAsset(
+            0x6B175474E89094C44Da98b954EedeAC495271d0F
+        ); // DAI
+        swapPathAssets["DAI"][1] = IAsset(
+            0x7B50775383d3D6f0215A8F290f2C9e2eEBBEceb2
+        ); // bb-a-USD
+        swapPathAssets["DAI"][2] = IAsset(
+            0x804CdB9116a10bB78768D3252355a1b18067bF8f
+        ); // bb-a-DAI
+    }
+
+    function _setSwapPathAssetIndexes() internal {
+        swapPathAssetIndexes["DAI"] = new uint256[](3);
+        swapPathAssetIndexes["DAI"][0] = 0;
+        swapPathAssetIndexes["DAI"][1] = 2;
+        swapPathAssetIndexes["DAI"][2] = 1;
+    }
+
+    // mapping(string => bytes32[]) internal swapPathPoolIDs;
+    // mapping(string => IAsset[]) internal swapPathAssets;
+    // mapping(string => uint256[]) internal swapPathAssetIndexes;
 }
