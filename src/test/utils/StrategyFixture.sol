@@ -248,11 +248,12 @@ contract StrategyFixture is ExtendedTest {
         BaseStrategy autoCompounderStrategy = BaseStrategy(
             autoCompounder.withdrawalQueue(0)
         );
-        uint256 autoCompounderDebt = autoCompounder.totalDebt();
+        
+        uint256 autoCompounderAssets = autoCompounder.totalAssets();
         deal(
             bptToken,
             address(autoCompounderStrategy),
-            autoCompounderDebt / 150
+            autoCompounderAssets / 200
         ); // 0.5% gain
         vm.prank(autoCompounderStrategy.strategist());
         autoCompounderStrategy.harvest();
