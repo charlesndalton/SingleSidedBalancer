@@ -131,9 +131,15 @@ contract StrategyOperationsTest is StrategyFixture {
             // simulate yield by throwing some bpts in the underlying vault
             address bptToken = address(strategy.balancerPool());
             IVault autoCompounder = strategy.bptVault();
-            BaseStrategy autoCompounderStrategy = BaseStrategy(autoCompounder.withdrawalQueue(0));
+            BaseStrategy autoCompounderStrategy = BaseStrategy(
+                autoCompounder.withdrawalQueue(0)
+            );
             uint256 autoCompounderDebt = autoCompounder.totalDebt();
-            deal(bptToken, address(autoCompounderStrategy), autoCompounderDebt / 200); // 0.5% gain
+            deal(
+                bptToken,
+                address(autoCompounderStrategy),
+                autoCompounderDebt / 200
+            ); // 0.5% gain
             vm.prank(autoCompounderStrategy.strategist());
             autoCompounderStrategy.harvest();
             skip(6 hours);
