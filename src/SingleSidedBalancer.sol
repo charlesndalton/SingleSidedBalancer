@@ -367,6 +367,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
     event Cloned(address indexed clone);
 
     bool public isOriginal = true;
+    uint256 internal constant MAX_TOKENS = 20;
 
     // Cloning & initialization code adapted from https://github.com/yearn/yearn-vaults/blob/43a0673ab89742388369bc0c9d1f321aa7ea73f6/contracts/BaseStrategy.sol#L866
 
@@ -409,6 +410,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         uint8 _numTokens = uint8(tokens.length);
         numTokens = _numTokens;
         require(_numTokens > 0, "Empty Pool");
+        require(_numTokens <= MAX_TOKENS, "Exceeds max tokens");
 
         assets = new IAsset[](numTokens);
         uint8 _tokenIndex = type(uint8).max;
