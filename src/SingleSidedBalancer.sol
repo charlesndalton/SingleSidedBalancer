@@ -73,8 +73,9 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
             return 0;
         }
         uint256 _pricePerShare = bptVault.pricePerShare();
+        uint256 _decimals = IERC20Metadata(address(balancerPool)).decimals();
         // ASSUMPTION: balancer pool tokens are always 18 decimals
-        return (_balance * _pricePerShare) / 1e18;
+        return (_balance * _pricePerShare) / (10 ** _decimals);
     }
 
     function bptToWant(uint256 _bptAmount) public view returns (uint256) {
