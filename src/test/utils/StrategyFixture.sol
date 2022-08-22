@@ -37,7 +37,6 @@ contract StrategyFixture is ExtendedTest {
     mapping(string => uint256) internal maxSlippagesIn;
     mapping(string => uint256) internal maxSlippagesOut;
     mapping(string => uint256) internal maxSingleInvests;
-    mapping(string => uint256) internal minDepositPeriods;
 
     // only relevant for phantom BPT pools
     mapping(string => bytes32[]) internal swapPathPoolIDs;
@@ -66,7 +65,6 @@ contract StrategyFixture is ExtendedTest {
         _setMaxSlippagesIn();
         _setMaxSlippagesOut();
         _setMaxSingleInvests();
-        _setMinDepositPeriods();
         _setSwapPathPoolIDs();
         _setSwapPathAssets();
         _setSwapPathAssetIndexes();
@@ -145,16 +143,14 @@ contract StrategyFixture is ExtendedTest {
         address _bptVault,
         uint256 _maxSlippageIn,
         uint256 _maxSlippageOut,
-        uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod
+        uint256 _maxSingleInvest
     ) internal returns (address) {
         BasicSingleSidedBalancer _ssb = new BasicSingleSidedBalancer(
             _vault,
             _bptVault,
             _maxSlippageIn,
             _maxSlippageOut,
-            _maxSingleInvest,
-            _minDepositPeriod
+            _maxSingleInvest
         );
 
         return address(_ssb);
@@ -166,7 +162,6 @@ contract StrategyFixture is ExtendedTest {
         uint256 _maxSlippageIn,
         uint256 _maxSlippageOut,
         uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod,
         bytes32[] memory _swapPathPoolIDs,
         IAsset[] memory _swapPathAssets,
         uint256[] memory _swapPathAssetIndexes
@@ -177,7 +172,6 @@ contract StrategyFixture is ExtendedTest {
             _maxSlippageIn,
             _maxSlippageOut,
             _maxSingleInvest,
-            _minDepositPeriod,
             _swapPathPoolIDs,
             _swapPathAssets,
             _swapPathAssetIndexes
@@ -213,8 +207,7 @@ contract StrategyFixture is ExtendedTest {
                 bptVaults[_tokenToTest],
                 maxSlippagesIn[_tokenToTest],
                 maxSlippagesOut[_tokenToTest],
-                maxSingleInvests[_tokenToTest],
-                minDepositPeriods[_tokenToTest]
+                maxSingleInvests[_tokenToTest]
             );
         } else if (_ssbType == SSBType.PHANTOM) {
             _strategyAddr = deployPhantomSSB(
@@ -223,7 +216,6 @@ contract StrategyFixture is ExtendedTest {
                 maxSlippagesIn[_tokenToTest],
                 maxSlippagesOut[_tokenToTest],
                 maxSingleInvests[_tokenToTest],
-                minDepositPeriods[_tokenToTest],
                 swapPathPoolIDs[_tokenToTest],
                 swapPathAssets[_tokenToTest],
                 swapPathAssetIndexes[_tokenToTest]
@@ -305,11 +297,6 @@ contract StrategyFixture is ExtendedTest {
     function _setMaxSingleInvests() internal {
         maxSingleInvests["USDC"] = 250_000 * 1e6;
         maxSingleInvests["DAI"] = 250_000 * 1e18;
-    }
-
-    function _setMinDepositPeriods() internal {
-        minDepositPeriods["USDC"] = 3 days;
-        minDepositPeriods["DAI"] = 3 days;
     }
 
     function _setSwapPathPoolIDs() internal {

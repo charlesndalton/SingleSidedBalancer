@@ -40,7 +40,6 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     uint256 public maxSlippageIn; // bips
     uint256 public maxSlippageOut; // bips
     uint256 public maxSingleInvest;
-    uint256 public minDepositPeriod; // seconds
     bool public withdrawProtection;
     uint256 internal constant MAX_BPS = 10000;
 
@@ -118,10 +117,6 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     function investWantIntoBalancerPool(uint256 _wantAmount) internal virtual;
 
     function adjustPosition(uint256 _debtOutstanding) internal override {
-        if (block.timestamp - lastDepositTime < minDepositPeriod) {
-            return;
-        }
-
         uint256 _balanceOfWant = want.balanceOf(address(this));
         if (_balanceOfWant > _debtOutstanding) {
             uint256 _amountToInvest = _balanceOfWant - _debtOutstanding;
@@ -328,12 +323,6 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
         maxSlippageOut = _maxSlippageOut;
     }
 
-    function updateMinDepositPeriod(uint256 _minDepositPeriod)
-        public
-        onlyVaultManagers
-    {
-        minDepositPeriod = _minDepositPeriod;
-    }
 
     function updateMaxSingleInvest(uint256 _maxSingleInvest)
         public
@@ -376,15 +365,13 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         address _bptVault,
         uint256 _maxSlippageIn,
         uint256 _maxSlippageOut,
-        uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod
+        uint256 _maxSingleInvest
     ) BaseSingleSidedBalancer(_vault) {
         _initializeStrat(
             _bptVault,
             _maxSlippageIn,
             _maxSlippageOut,
-            _maxSingleInvest,
-            _minDepositPeriod
+            _maxSingleInvest
         );
     }
 
@@ -392,8 +379,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         address _bptVault,
         uint256 _maxSlippageIn,
         uint256 _maxSlippageOut,
-        uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod
+        uint256 _maxSingleInvest
     ) internal virtual {
         // health.ychad.eth
         // this is commented out because sometimes we have more than 1 bip of losses,
@@ -426,7 +412,6 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         maxSlippageIn = _maxSlippageIn;
         maxSlippageOut = _maxSlippageOut;
         maxSingleInvest = _maxSingleInvest;
-        minDepositPeriod = _minDepositPeriod;
 
         want.safeApprove(address(balancerVault), type(uint256).max);
         IERC20(address(balancerPool)).safeApprove(
@@ -445,16 +430,14 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         address _bptVault,
         uint256 _maxSlippageIn,
         uint256 _maxSlippageOut,
-        uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod
+        uint256 _maxSingleInvest
     ) external virtual {
         _initialize(_vault, _strategist, _rewards, _keeper);
         _initializeStrat(
             _bptVault,
             _maxSlippageIn,
             _maxSlippageOut,
-            _maxSingleInvest,
-            _minDepositPeriod
+            _maxSingleInvest
         );
     }
 
@@ -466,8 +449,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         address _bptVault,
         uint256 _maxSlippageIn,
         uint256 _maxSlippageOut,
-        uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod
+        uint256 _maxSingleInvest
     ) external returns (address newStrategy) {
         require(isOriginal, "!clone");
         bytes20 addressBytes = bytes20(address(this));
@@ -495,8 +477,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
             _bptVault,
             _maxSlippageIn,
             _maxSlippageOut,
-            _maxSingleInvest,
-            _minDepositPeriod
+            _maxSingleInvest
         );
 
         emit Cloned(newStrategy);
@@ -594,7 +575,6 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         uint256 _maxSlippageIn,
         uint256 _maxSlippageOut,
         uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod,
         bytes32[] memory _swapPathPoolIDs,
         IAsset[] memory _swapPathAssets,
         uint256[] memory _swapPathAssetIndexes
@@ -604,7 +584,6 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
             _maxSlippageIn,
             _maxSlippageOut,
             _maxSingleInvest,
-            _minDepositPeriod,
             _swapPathPoolIDs,
             _swapPathAssets,
             _swapPathAssetIndexes
@@ -616,7 +595,6 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         uint256 _maxSlippageIn,
         uint256 _maxSlippageOut,
         uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod,
         bytes32[] memory _swapPathPoolIDs,
         IAsset[] memory _swapPathAssets,
         uint256[] memory _swapPathAssetIndexes
@@ -635,7 +613,6 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         maxSlippageIn = _maxSlippageIn;
         maxSlippageOut = _maxSlippageOut;
         maxSingleInvest = _maxSingleInvest;
-        minDepositPeriod = _minDepositPeriod;
 
         want.safeApprove(address(balancerVault), type(uint256).max);
         IERC20(address(balancerPool)).safeApprove(
@@ -689,7 +666,6 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         uint256 _maxSlippageIn,
         uint256 _maxSlippageOut,
         uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod,
         bytes32[] memory _swapPathPoolIDs,
         IAsset[] memory _swapPathAssets,
         uint256[] memory _swapPathAssetIndexes
@@ -700,7 +676,6 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
             _maxSlippageIn,
             _maxSlippageOut,
             _maxSingleInvest,
-            _minDepositPeriod,
             _swapPathPoolIDs,
             _swapPathAssets,
             _swapPathAssetIndexes
@@ -716,7 +691,6 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         uint256 _maxSlippageIn,
         uint256 _maxSlippageOut,
         uint256 _maxSingleInvest,
-        uint256 _minDepositPeriod,
         bytes32[] memory _swapPathPoolIDs,
         IAsset[] memory _swapPathAssets,
         uint256[] memory _swapPathAssetIndexes
@@ -748,7 +722,6 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
             _maxSlippageIn,
             _maxSlippageOut,
             _maxSingleInvest,
-            _minDepositPeriod,
             _swapPathPoolIDs,
             _swapPathAssets,
             _swapPathAssetIndexes
