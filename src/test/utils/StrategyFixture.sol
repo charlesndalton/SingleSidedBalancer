@@ -53,7 +53,7 @@ contract StrategyFixture is ExtendedTest {
     address public keeper = address(7);
 
     // Used for integer approximation
-    uint256 public constant DELTA = 10**3;
+    uint256 public constant DELTA = 10**2;
     uint256 public minFuzzAmt = 100 ether; // 10 cents
     uint256 public maxFuzzAmt = 25_000_000 ether; // $25M
 
@@ -285,7 +285,7 @@ contract StrategyFixture is ExtendedTest {
     }
 
     function _setMaxSlippagesIn() internal {
-        maxSlippagesIn["USDC"] = 50;
+        maxSlippagesIn["USDC"] = 30;
         maxSlippagesIn["DAI"] = 50;
     }
 

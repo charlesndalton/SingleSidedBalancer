@@ -732,7 +732,6 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
     }
 
     function extensionName() internal view override returns (string memory) {
-        // basic pool, no frills
         return "PHANTOM";
     }
 
