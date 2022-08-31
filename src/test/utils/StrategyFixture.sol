@@ -48,9 +48,8 @@ contract StrategyFixture is ExtendedTest {
     address public whale = address(2);
     address public rewards = address(3);
     address public guardian = address(4);
-    address public management = address(5);
-    address public strategist = address(6);
-    address public keeper = address(7);
+    address public strategist = address(5); // strategy strategist and vault manager
+    address public keeper = address(6);
 
     // Used for integer approximation
     uint256 public constant DELTA = 10**2;
@@ -100,7 +99,6 @@ contract StrategyFixture is ExtendedTest {
         vm.label(whale, "Whale");
         vm.label(rewards, "Rewards");
         vm.label(guardian, "Guardian");
-        vm.label(management, "Management");
         vm.label(strategist, "Strategist");
         vm.label(keeper, "Keeper");
 
@@ -193,7 +191,7 @@ contract StrategyFixture is ExtendedTest {
             "",
             "",
             guardian,
-            management
+            strategist
         );
         IVault _vault = IVault(_vaultAddr);
 
@@ -230,6 +228,8 @@ contract StrategyFixture is ExtendedTest {
 
         vm.prank(gov);
         _vault.addStrategy(_strategyAddr, 10_000, 0, type(uint256).max, 1_000);
+
+        skip(1); // can't harvest in same block you add
 
         return (address(_vault), address(_strategy));
     }

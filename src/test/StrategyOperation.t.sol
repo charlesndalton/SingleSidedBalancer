@@ -54,11 +54,55 @@ contract StrategyOperationsTest is StrategyFixture {
             strategy.tend();
 
             vm.startPrank(user);
-            vault.withdraw(vault.balanceOf(user), user, 10); // allow 10 bips loss
+            vault.withdraw(vault.balanceOf(user), user, 25); // allow 25 bips slippage loss
             vm.stopPrank();
 
             assertRelApproxEq(want.balanceOf(user), balanceBefore, DELTA);
         }
+    }
+
+
+    // At sufficiently large amounts, ALL slippage checks should fail. 
+    // To test that slippage checks are working, we set a really high max invest,
+    // try to invest a large amount, and expect a revert.
+    function testSlippageChecks(uint256 _fuzzAmount) public {
+        vm.assume(_fuzzAmount > minFuzzAmt && _fuzzAmount < maxFuzzAmt);
+        _fuzzAmount *= 1_000_000; // set a high investing amount
+        for (uint8 i = 0; i < strategyFixtures.length; ++i) {
+            BaseSingleSidedBalancer strategy = strategyFixtures[i];
+            IVault vault = IVault(address(strategy.vault()));
+            IERC20 want = IERC20(strategy.want());
+
+            uint256 _amount = _fuzzAmount;
+            uint8 _wantDecimals = IERC20Metadata(address(want)).decimals();
+            if (_wantDecimals != 18) {
+                uint256 _decimalDifference = 18 - _wantDecimals;
+
+                _amount = _amount / (10**_decimalDifference);
+            }
+
+            deal(address(want), user, _amount);
+
+            uint256 balanceBefore = want.balanceOf(address(user));
+            vm.prank(user);
+            want.approve(address(vault), _amount);
+            vm.prank(user);
+            vault.deposit(_amount);
+
+            // once we set high max invest, harvest should fail
+            vm.startPrank(strategist);
+            strategy.updateMaxSingleInvest(balanceBefore);
+
+            vm.expectRevert("BAL#208");
+            strategy.harvest();
+            vm.stopPrank();
+
+            // user can still withdraw, & they should incur no losses
+            vm.prank(user);
+            vault.withdraw();
+            assertRelApproxEq(want.balanceOf(user), balanceBefore, DELTA);
+        }
+        
     }
 
     function testEmergencyExit(uint256 _fuzzAmount) public {
@@ -82,7 +126,7 @@ contract StrategyOperationsTest is StrategyFixture {
             want.approve(address(vault), _amount);
             vm.prank(user);
             vault.deposit(_amount);
-            skip(1);
+            
             vm.prank(strategist);
             strategy.harvest();
             assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, DELTA);
