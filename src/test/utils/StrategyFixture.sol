@@ -230,6 +230,8 @@ contract StrategyFixture is ExtendedTest {
         _vault.addStrategy(_strategyAddr, 10_000, 0, type(uint256).max, 1_000);
 
         skip(1); // can't harvest in same block you add
+        vm.prank(strategist);
+        _strategy.setHealthCheck(address(0)); // otherwise, it doesn't allow even 1 bip losses
 
         return (address(_vault), address(_strategy));
     }

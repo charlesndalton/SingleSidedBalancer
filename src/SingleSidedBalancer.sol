@@ -394,9 +394,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         uint256 _maxSingleInvest
     ) internal virtual {
         // health.ychad.eth
-        // this is commented out because sometimes we have more than 1 bip of losses,
-        // and tests wont pass in those cases. Should be uncommented before deployment
-        // healthCheck = address(0xDDCea799fF1699e98EDF118e0629A974Df7DF012);
+        healthCheck = address(0xDDCea799fF1699e98EDF118e0629A974Df7DF012);
 
         bptVault = IVault(_bptVault);
 
@@ -625,9 +623,7 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         uint256[] memory _swapPathAssetIndexes
     ) internal virtual {
         // health.ychad.eth
-        // this is commented out because sometimes we have more than 1 bip of losses,
-        // and tests wont pass in those cases. Should be uncommented before deployment
-        // healthCheck = address(0xDDCea799fF1699e98EDF118e0629A974Df7DF012);
+        healthCheck = address(0xDDCea799fF1699e98EDF118e0629A974Df7DF012);
 
         bptVault = IVault(_bptVault);
 
@@ -787,8 +783,6 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
     }
 
     function investWantIntoBalancerPool(uint256 _wantAmount) internal override {
-        // uint256 _minBPTOut = (wantToBPT(_wantAmount) *
-        //     (MAX_BPS - maxSlippageIn)) / MAX_BPS;
 
         depositSwapSteps[0].amount = _wantAmount;
 
