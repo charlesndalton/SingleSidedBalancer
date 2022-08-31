@@ -16,13 +16,31 @@ import {IBalancerVault} from "./interfaces/Balancer/IBalancerVault.sol";
 import {IAsset} from "./interfaces/Balancer/IAsset.sol";
 import {IVault} from "./interfaces/Yearn/Vault.sol";
 
-import "forge-std/console2.sol";
 
 /* A few key things can change between underlying pools. For example, although we enter
  * most pools through balancerVault.joinPool(), linear pools such as the aave boosted pool
  * don't support this, and we need to enter them through batch swaps. Common logic inside
  * 'BaseSingleSidedBalancer' and details are implemented in extensions such as
  * 'PhantomSingleSidedBalancer'.
+ */
+/**
+ * @notice Strategy for depositing into Balancer and depositing LP tokens into auto-compounding vault.
+ * @dev Balancer pools are heterogeneous. Already, there are normal pools and phantom
+        pools. Balancer may also add more types in the future.
+
+        To accomodate this, we use the template pattern. `BaseSingleSidedBalancer`
+        contains a bunch of logic that is shared across pool types. For each pool
+        type, there is a corresponding extension. 
+
+        All extensions must implement the following:
+        - extensionName() returns (string memory)
+        - investWantIntoBalancerPool(uint256 _wantAmount)
+        - liquidateBPTsToWant(uint256 _bptAmount)
+        The latter two functions must perform slippage checks based on two params
+        in the template, `maxSlippageIn` and `maxSlippageOut.` 
+        
+        Extensions can optionally add other functions which allow vault managers
+        to manually manage the position.
  */
 abstract contract BaseSingleSidedBalancer is BaseStrategy {
     using SafeERC20 for IERC20;
@@ -340,16 +358,9 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     }
 }
 
-/* All extensions must implement the following:
- * function extensionName() returns (string memory)
- * function investWantIntoBalancerPool(uint256 _wantAmount)
- * function liquidateBPTsToWant(uint256 _bptAmount)
- *
- *
- * Extensions can optionally add other functions which allow vault managers
- * to manually manage the position.
+/**
+ * @notice SSB Extension for normal pools. Should only be used for stable pools.
  */
-
 contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
     using SafeERC20 for IERC20;
     using Address for address;
@@ -539,8 +550,16 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
     }
 }
 
-// Phantom BPTs need to be swapped into. Since I don't trust ySwaps to swap principal,
-// you need to pass in a swap route during deployment
+/**
+ * @notice SSB Extension for Phantom pools
+ * @dev We can't deposit into Phantom pools the same way that we deposit into normal pools. 
+        Instead, we need to swap into them. For example, if we needed to deposit
+        DAI into the Boosted pool, we would swap DAI -> bb_a_DAI -> bb_a_USD.
+
+        This is challenging because there can be different numbers of swaps in
+        the swap path, but stack-allocated arrays need to be fixed-size. To get
+        around this, we create storage arrays at initialization time.
+  */
 contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
     using SafeERC20 for IERC20;
     using Address for address;
@@ -548,21 +567,13 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
     // These three are set manually by strategists
     bytes32[] public swapPathPoolIDs; // pool IDs of pools in your swap path, in the order of swapping.
     IAsset[] public swapPathAssets; // these MUST be sorted numerically
-    uint256[] public swapPathAssetIndexes;
-    /*
-     * Example: let's say we wanted to single-side DAI into the boosted pool
-     * swapPathPoolIDs[0] would be the ID of the pool that contains regular DAI and bb_a_DAI
-     * swapPathPoolIDs[1] would be the ID of the pool that contains bb_a_DAI and bb_a_USD (the real BPT)
-     * If these were reversed, the strategy would try to swap DAI into the bb_a_DAI/bb_a_USD pool, which doesn't make any sense.
-     * assets would be DAI, bb_a_DAI, and bb_a_USD, sorted numerically (so not necessarily in that order, but let's assume that this is the case)
-     * swapPathAssetIndexes would be [0, 1, 2]
-     * if assets was [bb_a_DAI, bb_a_USD, DAI], swapPathAssetIndexes would be [2, 1, 0]
-     */
+    uint256[] public swapPathAssetIndexes; // explained in following example
 
-    // These are set automatically by the code
-    int256[] limits;
-    IBalancerVault.BatchSwapStep[] batchSwapSteps;
-    IBalancerVault.BatchSwapStep[] reverseBatchSwapSteps;
+    IBalancerVault.BatchSwapStep[] depositSwapSteps; 
+    int256[] depositLimits;
+
+    IBalancerVault.BatchSwapStep[] withdrawSwapSteps;
+    int256[] withdrawLimits;
 
     event Cloned(address indexed clone);
 
@@ -570,6 +581,19 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
 
     // Cloning & initialization code adapted from https://github.com/yearn/yearn-vaults/blob/43a0673ab89742388369bc0c9d1f321aa7ea73f6/contracts/BaseStrategy.sol#L866
 
+    /**
+     * @param _swapPathPoolIDs Pool IDs of pools in your swap path, in the order of swapping.
+     * @param _swapPathAssets Assets you're swapping through. Must be sorted from smallest address to biggest address.
+     * @param _swapPathAssetIndexes Indexes of `_swapPathAssets` which explain the order that you're swapping through the assets. Explained in following example.
+     *
+     * @dev Let's say we wanted to single-side DAI into the boosted pool
+            swapPathPoolIDs[0] would be the ID of the pool that contains regular DAI and bb_a_DAI
+            swapPathPoolIDs[1] would be the ID of the pool that contains bb_a_DAI and bb_a_USD (the real BPT)
+            If these were reversed, the strategy would try to swap DAI into the bb_a_DAI/bb_a_USD pool, which doesn't make any sense.
+            assets would be DAI, bb_a_DAI, and bb_a_USD, sorted numerically (so not necessarily in that order, but let's assume that this is the case)
+            swapPathAssetIndexes would be [0, 1, 2]
+            if assets was [bb_a_DAI, bb_a_USD, DAI], swapPathAssetIndexes would be [2, 1, 0]
+     */
     constructor(
         address _vault,
         address _bptVault,
@@ -626,21 +650,22 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         swapPathAssetIndexes = _swapPathAssetIndexes;
 
         // we need to create one swap path for swapping want -> BPT and one for swapping BPT -> want
-
         // example of swap steps here: https://github.com/charlesndalton/StrategyBalancerTemplate/blob/df947fbb2f4b973d46b820001e476dfbe27c0826/tests/test_yswap.py#L79-L104
+
         uint256 _numberOfPools = swapPathPoolIDs.length;
         for (uint8 i = 0; i < _numberOfPools; i++) {
-            batchSwapSteps.push(
+            depositSwapSteps.push(
                 IBalancerVault.BatchSwapStep(
                     swapPathPoolIDs[i], // poolId
                     swapPathAssetIndexes[i], // assetInIndex
                     swapPathAssetIndexes[i + 1], // assetOutIndex
-                    0, // amount (PLACEHOLDER)
+                    0, // amount (0 is a placeholder, since this will be modified in each deposit call)
                     abi.encode(0) // userData
                 )
             );
 
-            reverseBatchSwapSteps.push(
+            // should be the items, but in reverse order
+            withdrawSwapSteps.push(
                 IBalancerVault.BatchSwapStep(
                     swapPathPoolIDs[_numberOfPools - 1 - i],
                     swapPathAssetIndexes[_numberOfPools - i],
@@ -650,10 +675,36 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
                 )
             );
 
-            limits.push(2**200);
-        }
+            /// Balancer explanation of limits: 
+            /// An array of maximum amounts of each asset to be transferred. 
+            /// For tokens going in to the Vault, the limit shall be a positive number. 
+            /// For tokens going out of the Vault, the limit shall be a negative number. 
+            /// If the amount to be transferred for a given asset is greater than its limit, 
+            /// the trade will fail with error BAL#507: SWAP_LIMIT. 
 
-        limits.push(2**200); // always will be 1 more asset than pool, this isn't the cleanest way to do it but saves some gas
+            /// For slippage checks, we care about the limit of the asset that's
+            /// coming out of the vault (to us). When we're depositing, we care
+            /// about the limit of the LP token. When we're withdrawing, we care
+            /// about the limit of want. 
+
+            /// Because assets are in order of hex size and not in order of swap,
+            /// figuring out which limit to change for slippage checks is a bit
+            /// of a chore. It's not just limits[0] or limits[limits.length - 1].
+            /// For a deposit, we need to change `limits[swapPathAssetIndexes[0]]`.
+            /// For a withdrawal, we need to change `limits[swapPathAssetIndexes[swapPathAssetIndexes.length - 1]]`.
+
+            /// For every other asset, the limit can just be a really high number. 
+            /// So we start by creating two storage arrays, filled with really high
+            /// numbers, and allow deposit to modify one and withdraw to modify the
+            /// other one.
+
+            /// num of limits = num of assets = num of pools + 1, so we push 1 for each iteration of this loop and an additional one at the end
+
+            depositLimits.push(type(int256).max);
+            withdrawLimits.push(type(int256).max);
+        }
+        depositLimits.push(type(int256).max);
+        withdrawLimits.push(type(int256).max);
 
         withdrawProtection = true;
     }
@@ -739,7 +790,7 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         // uint256 _minBPTOut = (wantToBPT(_wantAmount) *
         //     (MAX_BPS - maxSlippageIn)) / MAX_BPS;
 
-        batchSwapSteps[0].amount = _wantAmount;
+        depositSwapSteps[0].amount = _wantAmount;
 
         IBalancerVault.FundManagement memory _funds = IBalancerVault
             .FundManagement(
@@ -751,16 +802,16 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
 
         balancerVault.batchSwap(
             IBalancerVault.SwapKind.GIVEN_IN,
-            batchSwapSteps,
+            depositSwapSteps,
             swapPathAssets,
             _funds,
-            limits,
+            depositLimits,
             block.timestamp
         );
     }
 
     function liquidateBPTsToWant(uint256 _bptAmount) internal override {
-        reverseBatchSwapSteps[0].amount = _bptAmount;
+        withdrawSwapSteps[0].amount = _bptAmount;
 
         IBalancerVault.FundManagement memory _funds = IBalancerVault
             .FundManagement(
@@ -772,10 +823,10 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
 
         balancerVault.batchSwap(
             IBalancerVault.SwapKind.GIVEN_IN,
-            reverseBatchSwapSteps,
+            withdrawSwapSteps,
             swapPathAssets,
             _funds,
-            limits,
+            withdrawLimits,
             block.timestamp
         );
     }
