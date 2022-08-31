@@ -283,7 +283,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     // === MISC FUNCTIONS ===
 
     // Examples: BASIC, PHANTOM
-    function extensionName() internal view virtual returns (string memory);
+    function extensionName() public view virtual returns (string memory);
 
     // Examples: SSB_DAI_BASIC_FUD, SSB_USDC_PHANTOM_bb-a-USD
     function name() external view override returns (string memory) {
@@ -493,7 +493,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         emit Cloned(newStrategy);
     }
 
-    function extensionName() internal view override returns (string memory) {
+    function extensionName() public view override returns (string memory) {
         // basic pool, no frills
         return "BASIC";
     }
@@ -686,8 +686,9 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
             /// Because assets are in order of hex size and not in order of swap,
             /// figuring out which limit to change for slippage checks is a bit
             /// of a chore. It's not just limits[0] or limits[limits.length - 1].
-            /// For a deposit, we need to change `limits[swapPathAssetIndexes[0]]`.
-            /// For a withdrawal, we need to change `limits[swapPathAssetIndexes[swapPathAssetIndexes.length - 1]]`.
+            /// For a deposit, we need to change `limits[swapPathAssetIndexes[swapPathAssetIndexes.length - 1]]`.
+            /// For a withdrawal, we need to change `limits[swapPathAssetIndexes[0]]`.
+            /// In our previous example, this would change bb-a-USD for deposits and DAI for withdrawals.
 
             /// For every other asset, the limit can just be a really high number. 
             /// So we start by creating two storage arrays, filled with really high
@@ -778,11 +779,17 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         emit Cloned(newStrategy);
     }
 
-    function extensionName() internal view override returns (string memory) {
+    function extensionName() public view override returns (string memory) {
         return "PHANTOM";
     }
 
     function investWantIntoBalancerPool(uint256 _wantAmount) internal override {
+        uint256 _minBPTOut = (wantToBPT(_wantAmount) *
+            (MAX_BPS - maxSlippageIn)) / MAX_BPS;
+
+        assert(_minBPTOut < 2**255); // security check that it's castable to int256 without overflow
+
+        depositLimits[swapPathAssetIndexes[swapPathAssetIndexes.length - 1]] = 0 - int256(_minBPTOut);
 
         depositSwapSteps[0].amount = _wantAmount;
 
@@ -805,6 +812,9 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
     }
 
     function liquidateBPTsToWant(uint256 _bptAmount) internal override {
+        uint256 _minWantOut = (bptToWant(_bptAmount) * (MAX_BPS - maxSlippageOut)) /
+            MAX_BPS;
+
         withdrawSwapSteps[0].amount = _bptAmount;
 
         IBalancerVault.FundManagement memory _funds = IBalancerVault

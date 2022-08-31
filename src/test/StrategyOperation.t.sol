@@ -66,8 +66,8 @@ contract StrategyOperationsTest is StrategyFixture {
     // To test that slippage checks are working, we set a really high max invest,
     // try to invest a large amount, and expect a revert.
     function testSlippageChecks(uint256 _fuzzAmount) public {
-        vm.assume(_fuzzAmount > minFuzzAmt && _fuzzAmount < maxFuzzAmt);
-        _fuzzAmount *= 1_000_000; // set a high investing amount
+        vm.assume(_fuzzAmount > minFuzzAmt * 10_000 && _fuzzAmount < maxFuzzAmt);
+        _fuzzAmount *= 100; // set a high investing amount
         for (uint8 i = 0; i < strategyFixtures.length; ++i) {
             BaseSingleSidedBalancer strategy = strategyFixtures[i];
             IVault vault = IVault(address(strategy.vault()));
@@ -93,7 +93,12 @@ contract StrategyOperationsTest is StrategyFixture {
             vm.startPrank(strategist);
             strategy.updateMaxSingleInvest(balanceBefore);
 
-            vm.expectRevert("BAL#208");
+            if (compareStrings(strategy.extensionName(), "PHANTOM")) {
+                vm.expectRevert("BAL#507");
+            } else {
+                vm.expectRevert("BAL#208");
+            }
+            
             strategy.harvest();
             vm.stopPrank();
 
@@ -101,8 +106,11 @@ contract StrategyOperationsTest is StrategyFixture {
             vm.prank(user);
             vault.withdraw();
             assertRelApproxEq(want.balanceOf(user), balanceBefore, DELTA);
-        }
-        
+        }        
+    }
+
+    function compareStrings(string memory a, string memory b) public view returns (bool) {
+        return (keccak256(abi.encodePacked((a))) == keccak256(abi.encodePacked((b))));
     }
 
     function testEmergencyExit(uint256 _fuzzAmount) public {
