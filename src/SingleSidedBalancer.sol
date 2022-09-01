@@ -648,13 +648,21 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         // we need to create one swap path for swapping want -> BPT and one for swapping BPT -> want
         // example of swap steps here: https://github.com/charlesndalton/StrategyBalancerTemplate/blob/df947fbb2f4b973d46b820001e476dfbe27c0826/tests/test_yswap.py#L79-L104
 
-        uint256 _numberOfPools = swapPathPoolIDs.length;
+        uint256 _numberOfPools = _swapPathPoolIDs.length;
         for (uint8 i = 0; i < _numberOfPools; i++) {
+            bytes32 _poolID = _swapPathPoolIDs[i];
+
+            // Check that this pool indeed contains these tokens
+            address[] memory _tokensToCheck = new address[](2);
+            _tokensToCheck[0] = address(_swapPathAssets[_swapPathAssetIndexes[i]]);
+            _tokensToCheck[1] = address(_swapPathAssets[_swapPathAssetIndexes[i + 1]]);
+            require(poolContainsTokens(_poolID, _tokensToCheck), "!pool_contains_tokens");
+
             depositSwapSteps.push(
                 IBalancerVault.BatchSwapStep(
-                    swapPathPoolIDs[i], // poolId
-                    swapPathAssetIndexes[i], // assetInIndex
-                    swapPathAssetIndexes[i + 1], // assetOutIndex
+                    _poolID, // poolId
+                    _swapPathAssetIndexes[i], // assetInIndex
+                    _swapPathAssetIndexes[i + 1], // assetOutIndex
                     0, // amount (0 is a placeholder, since this will be modified in each deposit call)
                     abi.encode(0) // userData
                 )
@@ -663,9 +671,9 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
             // should be the items, but in reverse order
             withdrawSwapSteps.push(
                 IBalancerVault.BatchSwapStep(
-                    swapPathPoolIDs[_numberOfPools - 1 - i],
-                    swapPathAssetIndexes[_numberOfPools - i],
-                    swapPathAssetIndexes[_numberOfPools - 1 - i],
+                    _swapPathPoolIDs[_numberOfPools - 1 - i],
+                    _swapPathAssetIndexes[_numberOfPools - i],
+                    _swapPathAssetIndexes[_numberOfPools - 1 - i],
                     0,
                     abi.encode(0)
                 )
@@ -704,6 +712,24 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         withdrawLimits.push(type(int256).max);
 
         withdrawProtection = true;
+    }
+
+    function poolContainsTokens(bytes32 _poolID, address[] memory _tokens) internal returns (bool) {
+        (IERC20[] memory _tokensInPool,,) = balancerVault.getPoolTokens(_poolID);
+
+        uint256 _numberOfTokensToCheck = _tokens.length;
+
+        uint256 _matches = 0;
+
+        for (uint256 i = 0; i < _tokensInPool.length; i++) {
+            for (uint256 j = 0; j < _numberOfTokensToCheck; j++) {
+                if (address(_tokensInPool[i]) == _tokens[j]) {
+                    _matches++;
+                }
+            }
+        }
+
+        return _matches == _numberOfTokensToCheck;
     }
 
     function initialize(
