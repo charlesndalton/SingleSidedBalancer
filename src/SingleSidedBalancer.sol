@@ -171,7 +171,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
         if (_amountNeededLiquid > _liquidAssets) {
             uint256 _toWithdraw = _amountNeededLiquid - _liquidAssets;
 
-            (, uint256 _withdrawalLoss) = withdrawSome(_toWithdraw);
+            (, uint256 _withdrawalLoss) = _withdrawSome(_toWithdraw);
             if (_withdrawalLoss < _profit) {
                 _profit = _profit - _withdrawalLoss;
             } else {
@@ -200,7 +200,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
         if (_liquidAssets < _amountNeeded) {
             uint256 _toWithdraw = _amountNeeded - _liquidAssets;
-            (_liquidatedAmount, ) = withdrawSome(_toWithdraw);
+            (_liquidatedAmount, ) = _withdrawSome(_toWithdraw);
         }
 
         _liquidatedAmount = Math.min(
@@ -213,7 +213,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     // safe to request more than we have
     function _liquidateBPTsToWant(uint256 _bptAmount) internal virtual;
 
-    function withdrawSome(uint256 _amountToWithdraw)
+    function _withdrawSome(uint256 _amountToWithdraw)
         internal
         returns (uint256 _liquidatedAmount, uint256 _loss)
     {
@@ -326,6 +326,13 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     }
 
     // === MANAGEMENT FUNCTIONS ===
+
+    function withdrawSome(uint256 _amountToWithdraw)
+        external
+        onlyVaultManagers
+    {
+        _withdrawSome(_amountToWithdraw);
+    }
 
     function investWantIntoBalancerPool(uint256 _wantAmount)
         external
