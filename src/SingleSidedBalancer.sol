@@ -34,8 +34,8 @@ import {IVault} from "./interfaces/Yearn/Vault.sol";
 
         All extensions must implement the following:
         - extensionName() returns (string memory)
-        - investWantIntoBalancerPool(uint256 _wantAmount)
-        - liquidateBPTsToWant(uint256 _bptAmount)
+        - _investWantIntoBalancerPool(uint256 _wantAmount)
+        - _liquidateBPTsToWant(uint256 _bptAmount)
         The latter two functions must perform slippage checks based on two params
         in the template, `maxSlippageIn` and `maxSlippageOut.` 
         
@@ -133,14 +133,14 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
     // === HARVEST-RELEVANT FUNCTIONS ===
 
-    function investWantIntoBalancerPool(uint256 _wantAmount) internal virtual;
+    function _investWantIntoBalancerPool(uint256 _wantAmount) internal virtual;
 
     function adjustPosition(uint256 _debtOutstanding) internal override {
         uint256 _balanceOfWant = want.balanceOf(address(this));
         if (_balanceOfWant > _debtOutstanding) {
             uint256 _amountToInvest = _balanceOfWant - _debtOutstanding;
             _amountToInvest = Math.min(_amountToInvest, maxSingleInvest);
-            investWantIntoBalancerPool(_amountToInvest);
+            _investWantIntoBalancerPool(_amountToInvest);
             bptVault.deposit();
             lastDepositTime = block.timestamp;
         }
@@ -212,7 +212,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     }
 
     // safe to request more than we have
-    function liquidateBPTsToWant(uint256 _bptAmount) internal virtual;
+    function _liquidateBPTsToWant(uint256 _bptAmount) internal virtual;
 
     function withdrawSome(uint256 _amountToWithdraw)
         internal
@@ -255,7 +255,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
             _bptBeforeBalance;
 
         if (_bptsToLiquidate > 0) {
-            liquidateBPTsToWant(_bptsToLiquidate);
+            _liquidateBPTsToWant(_bptsToLiquidate);
         }
 
         uint256 _wantBalanceDiff = want.balanceOf(address(this)) -
@@ -276,7 +276,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     {
         // slippage checks still exist in emergency exit
         bptVault.withdraw(bptVault.balanceOf(address(this)));
-        liquidateBPTsToWant(balancerPool.balanceOf(address(this)));
+        _liquidateBPTsToWant(balancerPool.balanceOf(address(this)));
         return want.balanceOf(address(this));
     }
 
@@ -327,6 +327,14 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     }
 
     // === MANAGEMENT FUNCTIONS ===
+
+    function investWantIntoBalancerPool(uint256 _wantAmount) external onlyVaultManagers {
+        _investWantIntoBalancerPool(_wantAmount);
+    }
+
+    function liquidateBPTsToWant(uint256 _bptAmount) external onlyVaultManagers {
+        _liquidateBPTsToWant(_bptAmount);
+    }
 
     function updateMaxSlippageIn(uint256 _maxSlippageIn)
         public
@@ -498,7 +506,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         return "BASIC";
     }
 
-    function investWantIntoBalancerPool(uint256 _wantAmount) internal override {
+    function _investWantIntoBalancerPool(uint256 _wantAmount) internal override {
         uint256 _minBPTOut = (wantToBPT(_wantAmount) *
             (MAX_BPS - maxSlippageIn)) / MAX_BPS;
         uint256[] memory _maxAmountsIn = new uint256[](numTokens);
@@ -523,7 +531,7 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         }
     }
 
-    function liquidateBPTsToWant(uint256 _bptAmount) internal override {
+    function _liquidateBPTsToWant(uint256 _bptAmount) internal override {
         uint256[] memory _minAmountsOut = new uint256[](numTokens);
 
         _minAmountsOut[tokenIndex] =
@@ -809,7 +817,7 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         return "PHANTOM";
     }
 
-    function investWantIntoBalancerPool(uint256 _wantAmount) internal override {
+    function _investWantIntoBalancerPool(uint256 _wantAmount) internal override {
         uint256 _minBPTOut = (wantToBPT(_wantAmount) *
             (MAX_BPS - maxSlippageIn)) / MAX_BPS;
 
@@ -837,7 +845,7 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         );
     }
 
-    function liquidateBPTsToWant(uint256 _bptAmount) internal override {
+    function _liquidateBPTsToWant(uint256 _bptAmount) internal override {
         uint256 _minWantOut = (bptToWant(_bptAmount) * (MAX_BPS - maxSlippageOut)) /
             MAX_BPS;
 
