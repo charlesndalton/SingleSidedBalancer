@@ -90,6 +90,7 @@ contract StrategyOperationsTest is StrategyFixture {
             vault.deposit(_amount);
 
             // once we set high max invest, harvest should fail
+            uint256 maxSingleInvestBefore = strategy.maxSingleInvest();
             vm.startPrank(strategist);
             strategy.updateMaxSingleInvest(balanceBefore);
 
@@ -102,10 +103,34 @@ contract StrategyOperationsTest is StrategyFixture {
             strategy.harvest();
             vm.stopPrank();
 
-            // user can still withdraw, & they should incur no losses
-            vm.prank(user);
-            vault.withdraw();
-            assertRelApproxEq(want.balanceOf(user), balanceBefore, DELTA);
+            skip(3 minutes);
+
+            uint256 maxSlippageInBefore = strategy.maxSlippageIn();
+            vm.prank(strategist);
+            strategy.updateMaxSlippageIn(maxSlippageInBefore * 100);
+
+
+            // // I can't figure out how to test slippage on withdrawals
+            // skip(3 minutes);
+
+            // vm.prank(strategist);
+            // vault.updateStrategyDebtRatio(address(strategy), 0);
+            // strategy.updateMaxSlippageOut(1);
+
+            // vm.startPrank(strategist);
+            // if (compareStrings(strategy.extensionName(), "PHANTOM")) {
+            //     vm.expectRevert("BAL#507");
+            // } else {
+            //     vm.expectRevert("BAL#208");
+            // }
+            // // strategy.harvest();
+            // vm.stopPrank();
+            
+
+            // // user can still withdraw, & they should incur no losses
+            // vm.prank(user);
+            // vault.withdraw();
+            // assertRelApproxEq(want.balanceOf(user), balanceBefore, DELTA);
         }        
     }
 

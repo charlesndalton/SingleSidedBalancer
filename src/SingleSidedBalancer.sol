@@ -815,6 +815,10 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         uint256 _minWantOut = (bptToWant(_bptAmount) * (MAX_BPS - maxSlippageOut)) /
             MAX_BPS;
 
+        assert(_minWantOut < 2**255); // security check that it's castable to int256 without overflow
+
+        withdrawLimits[swapPathAssetIndexes[0]] = 0 - int256(_minWantOut);
+
         withdrawSwapSteps[0].amount = _bptAmount;
 
         IBalancerVault.FundManagement memory _funds = IBalancerVault

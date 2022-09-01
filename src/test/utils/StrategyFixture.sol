@@ -293,7 +293,7 @@ contract StrategyFixture is ExtendedTest {
 
     function _setMaxSlippagesOut() internal {
         maxSlippagesOut["USDC"] = 50;
-        maxSlippagesOut["DAI"] = 50;
+        maxSlippagesOut["DAI"] = 5;
     }
 
     function _setMaxSingleInvests() internal {
