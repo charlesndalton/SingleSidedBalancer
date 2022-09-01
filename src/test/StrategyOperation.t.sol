@@ -61,12 +61,13 @@ contract StrategyOperationsTest is StrategyFixture {
         }
     }
 
-
-    // At sufficiently large amounts, ALL slippage checks should fail. 
+    // At sufficiently large amounts, ALL slippage checks should fail.
     // To test that slippage checks are working, we set a really high max invest,
     // try to invest a large amount, and expect a revert.
     function testSlippageChecks(uint256 _fuzzAmount) public {
-        vm.assume(_fuzzAmount > minFuzzAmt * 10_000 && _fuzzAmount < maxFuzzAmt);
+        vm.assume(
+            _fuzzAmount > minFuzzAmt * 10_000 && _fuzzAmount < maxFuzzAmt
+        );
         _fuzzAmount *= 100; // set a high investing amount
         for (uint8 i = 0; i < strategyFixtures.length; ++i) {
             BaseSingleSidedBalancer strategy = strategyFixtures[i];
@@ -99,7 +100,7 @@ contract StrategyOperationsTest is StrategyFixture {
             } else {
                 vm.expectRevert("BAL#208");
             }
-            
+
             strategy.harvest();
             vm.stopPrank();
 
@@ -108,7 +109,6 @@ contract StrategyOperationsTest is StrategyFixture {
             uint256 maxSlippageInBefore = strategy.maxSlippageIn();
             vm.prank(strategist);
             strategy.updateMaxSlippageIn(maxSlippageInBefore * 100);
-
 
             // // I can't figure out how to test slippage on withdrawals
             // skip(3 minutes);
@@ -125,17 +125,21 @@ contract StrategyOperationsTest is StrategyFixture {
             // }
             // // strategy.harvest();
             // vm.stopPrank();
-            
 
             // // user can still withdraw, & they should incur no losses
             // vm.prank(user);
             // vault.withdraw();
             // assertRelApproxEq(want.balanceOf(user), balanceBefore, DELTA);
-        }        
+        }
     }
 
-    function compareStrings(string memory a, string memory b) public view returns (bool) {
-        return (keccak256(abi.encodePacked((a))) == keccak256(abi.encodePacked((b))));
+    function compareStrings(string memory a, string memory b)
+        public
+        view
+        returns (bool)
+    {
+        return (keccak256(abi.encodePacked((a))) ==
+            keccak256(abi.encodePacked((b))));
     }
 
     function testEmergencyExit(uint256 _fuzzAmount) public {
@@ -159,7 +163,7 @@ contract StrategyOperationsTest is StrategyFixture {
             want.approve(address(vault), _amount);
             vm.prank(user);
             vault.deposit(_amount);
-            
+
             vm.prank(strategist);
             strategy.harvest();
             assertRelApproxEq(strategy.estimatedTotalAssets(), _amount, DELTA);

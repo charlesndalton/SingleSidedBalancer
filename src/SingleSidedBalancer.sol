@@ -16,7 +16,6 @@ import {IBalancerVault} from "./interfaces/Balancer/IBalancerVault.sol";
 import {IAsset} from "./interfaces/Balancer/IAsset.sol";
 import {IVault} from "./interfaces/Yearn/Vault.sol";
 
-
 /* A few key things can change between underlying pools. For example, although we enter
  * most pools through balancerVault.joinPool(), linear pools such as the aave boosted pool
  * don't support this, and we need to enter them through batch swaps. Common logic inside
@@ -93,7 +92,7 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
         uint256 _pricePerShare = bptVault.pricePerShare();
         uint256 _decimals = IERC20Metadata(address(balancerPool)).decimals();
         // ASSUMPTION: balancer pool tokens are always 18 decimals
-        return (_balance * _pricePerShare) / (10 ** _decimals);
+        return (_balance * _pricePerShare) / (10**_decimals);
     }
 
     function bptToWant(uint256 _bptAmount) public view returns (uint256) {
@@ -328,11 +327,17 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
 
     // === MANAGEMENT FUNCTIONS ===
 
-    function investWantIntoBalancerPool(uint256 _wantAmount) external onlyVaultManagers {
+    function investWantIntoBalancerPool(uint256 _wantAmount)
+        external
+        onlyVaultManagers
+    {
         _investWantIntoBalancerPool(_wantAmount);
     }
 
-    function liquidateBPTsToWant(uint256 _bptAmount) external onlyVaultManagers {
+    function liquidateBPTsToWant(uint256 _bptAmount)
+        external
+        onlyVaultManagers
+    {
         _liquidateBPTsToWant(_bptAmount);
     }
 
@@ -349,7 +354,6 @@ abstract contract BaseSingleSidedBalancer is BaseStrategy {
     {
         maxSlippageOut = _maxSlippageOut;
     }
-
 
     function updateMaxSingleInvest(uint256 _maxSingleInvest)
         public
@@ -506,7 +510,10 @@ contract BasicSingleSidedBalancer is BaseSingleSidedBalancer {
         return "BASIC";
     }
 
-    function _investWantIntoBalancerPool(uint256 _wantAmount) internal override {
+    function _investWantIntoBalancerPool(uint256 _wantAmount)
+        internal
+        override
+    {
         uint256 _minBPTOut = (wantToBPT(_wantAmount) *
             (MAX_BPS - maxSlippageIn)) / MAX_BPS;
         uint256[] memory _maxAmountsIn = new uint256[](numTokens);
@@ -575,7 +582,7 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
     IAsset[] public swapPathAssets; // these MUST be sorted numerically
     uint256[] public swapPathAssetIndexes; // explained in following example
 
-    IBalancerVault.BatchSwapStep[] depositSwapSteps; 
+    IBalancerVault.BatchSwapStep[] depositSwapSteps;
     int256[] depositLimits;
 
     IBalancerVault.BatchSwapStep[] withdrawSwapSteps;
@@ -662,9 +669,16 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
 
             // Check that this pool indeed contains these tokens
             address[] memory _tokensToCheck = new address[](2);
-            _tokensToCheck[0] = address(_swapPathAssets[_swapPathAssetIndexes[i]]);
-            _tokensToCheck[1] = address(_swapPathAssets[_swapPathAssetIndexes[i + 1]]);
-            require(poolContainsTokens(_poolID, _tokensToCheck), "!pool_contains_tokens");
+            _tokensToCheck[0] = address(
+                _swapPathAssets[_swapPathAssetIndexes[i]]
+            );
+            _tokensToCheck[1] = address(
+                _swapPathAssets[_swapPathAssetIndexes[i + 1]]
+            );
+            require(
+                poolContainsTokens(_poolID, _tokensToCheck),
+                "!pool_contains_tokens"
+            );
 
             depositSwapSteps.push(
                 IBalancerVault.BatchSwapStep(
@@ -687,17 +701,17 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
                 )
             );
 
-            /// Balancer explanation of limits: 
-            /// An array of maximum amounts of each asset to be transferred. 
-            /// For tokens going in to the Vault, the limit shall be a positive number. 
-            /// For tokens going out of the Vault, the limit shall be a negative number. 
-            /// If the amount to be transferred for a given asset is greater than its limit, 
-            /// the trade will fail with error BAL#507: SWAP_LIMIT. 
+            /// Balancer explanation of limits:
+            /// An array of maximum amounts of each asset to be transferred.
+            /// For tokens going in to the Vault, the limit shall be a positive number.
+            /// For tokens going out of the Vault, the limit shall be a negative number.
+            /// If the amount to be transferred for a given asset is greater than its limit,
+            /// the trade will fail with error BAL#507: SWAP_LIMIT.
 
             /// For slippage checks, we care about the limit of the asset that's
             /// coming out of the vault (to us). When we're depositing, we care
             /// about the limit of the LP token. When we're withdrawing, we care
-            /// about the limit of want. 
+            /// about the limit of want.
 
             /// Because assets are in order of hex size and not in order of swap,
             /// figuring out which limit to change for slippage checks is a bit
@@ -706,7 +720,7 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
             /// For a withdrawal, we need to change `limits[swapPathAssetIndexes[0]]`.
             /// In our previous example, this would change bb-a-USD for deposits and DAI for withdrawals.
 
-            /// For every other asset, the limit can just be a really high number. 
+            /// For every other asset, the limit can just be a really high number.
             /// So we start by creating two storage arrays, filled with really high
             /// numbers, and allow deposit to modify one and withdraw to modify the
             /// other one.
@@ -722,8 +736,13 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         withdrawProtection = true;
     }
 
-    function poolContainsTokens(bytes32 _poolID, address[] memory _tokens) internal returns (bool) {
-        (IERC20[] memory _tokensInPool,,) = balancerVault.getPoolTokens(_poolID);
+    function poolContainsTokens(bytes32 _poolID, address[] memory _tokens)
+        internal
+        returns (bool)
+    {
+        (IERC20[] memory _tokensInPool, , ) = balancerVault.getPoolTokens(
+            _poolID
+        );
 
         uint256 _numberOfTokensToCheck = _tokens.length;
 
@@ -817,13 +836,18 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
         return "PHANTOM";
     }
 
-    function _investWantIntoBalancerPool(uint256 _wantAmount) internal override {
+    function _investWantIntoBalancerPool(uint256 _wantAmount)
+        internal
+        override
+    {
         uint256 _minBPTOut = (wantToBPT(_wantAmount) *
             (MAX_BPS - maxSlippageIn)) / MAX_BPS;
 
         assert(_minBPTOut < 2**255); // security check that it's castable to int256 without overflow
 
-        depositLimits[swapPathAssetIndexes[swapPathAssetIndexes.length - 1]] = 0 - int256(_minBPTOut);
+        depositLimits[swapPathAssetIndexes[swapPathAssetIndexes.length - 1]] =
+            0 -
+            int256(_minBPTOut);
 
         depositSwapSteps[0].amount = _wantAmount;
 
@@ -846,8 +870,8 @@ contract PhantomSingleSidedBalancer is BaseSingleSidedBalancer {
     }
 
     function _liquidateBPTsToWant(uint256 _bptAmount) internal override {
-        uint256 _minWantOut = (bptToWant(_bptAmount) * (MAX_BPS - maxSlippageOut)) /
-            MAX_BPS;
+        uint256 _minWantOut = (bptToWant(_bptAmount) *
+            (MAX_BPS - maxSlippageOut)) / MAX_BPS;
 
         assert(_minWantOut < 2**255); // security check that it's castable to int256 without overflow
 
